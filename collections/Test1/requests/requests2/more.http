@@ -1,0 +1,13 @@
+
+### More Requests
+
+TRACE http://localhost/path
+Authorization: Bearer token
+
+###
+
+### Foo
+
+GET http://foo
+
+###

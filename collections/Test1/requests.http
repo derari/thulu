@@ -1,0 +1,38 @@
+
+### First Request
+
+# this is a comment
+
+GET http://example.com
+Authorization: Bearer token
+
+# this is more comment
+
+### Second Request
+
+PATCH /localhost/path
+Authorization: Bearer token
+Content-Type: application/json
+
+{
+  "id": 1,
+  "foo": "bar"
+}
+
+###
+
+### asd
+
+GET http://example.com/another-path
+
+### Third Request
+
+POST http://localhost/path
+Authorization: Bearer token
+Content-Type: application/xml
+
+<xml>
+    <foo>1</foo>
+</xml>
+
+###
