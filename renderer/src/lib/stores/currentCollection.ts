@@ -1,94 +1,123 @@
-import { writable, derived } from 'svelte/store';
-import type { CurrentCollection, CollectionItem } from '../collection';
+import { derived, writable } from 'svelte/store';
+import type { CollectionItem, CurrentCollection } from '../collection';
 import { parseHttpFile } from '$lib/editor/httpParser.js';
+import { scanCollectionRoot } from '../collectionScanner.js';
+import { globalVariables } from './globalVariables.js';
 
 async function parseCollectionItems(items: CollectionItem[]): Promise<CollectionItem[]> {
-    const parsed: CollectionItem[] = [];
+	const parsed: CollectionItem[] = [];
 
-    for (const item of items) {
-        const parsedItem: CollectionItem = { ...item };
+	for (const item of items) {
+		const parsedItem: CollectionItem = { ...item };
 
-        if (item.filePath) {
-            const content = await window.electronAPI.readHttpFile(item.filePath);
-            const parsed = parseHttpFile(content);
-            parsedItem.sections = parsed.sections;
-        }
+		if (item.filePath) {
+			const content = await window.electronAPI.readFile(item.filePath);
+			if (content) {
+				const parsed = parseHttpFile(content);
+				parsedItem.sections = parsed.sections;
+			}
+		}
 
-        if (item.items && item.items.length > 0) {
-            parsedItem.items = await parseCollectionItems(item.items);
-        }
+		if (item.items && item.items.length > 0) {
+			parsedItem.items = await parseCollectionItems(item.items);
+		}
 
-        parsed.push(parsedItem);
-    }
+		parsed.push(parsedItem);
+	}
 
-    return parsed;
+	return parsed;
 }
 
 function createCurrentCollectionStore() {
-    const { subscribe, set, update } = writable<CurrentCollection | null>(null);
+	const { subscribe, set, update } = writable<CurrentCollection | null>(null);
 
-    return {
-        subscribe,
-        set,
-        update,
+	return {
+		subscribe,
+		set,
+		update,
 
-        async loadCollection(path: string, name: string) {
-            const items = await window.electronAPI.loadCollectionItems(path);
-            const parsedItems = await parseCollectionItems(items);
+		async loadCollection(path: string, name: string) {
+			let previousPath: string | null = null;
+			subscribe(currentCollection => {
+				if (currentCollection) {
+					previousPath = currentCollection.path;
+				}
+			})();
 
-            const collection: CurrentCollection = {
-                path,
-                name,
-                items: parsedItems,
-                metadata: { collectionName: name }
-            };
+			if (previousPath && previousPath !== path) {
+				globalVariables.clear(previousPath);
+			}
 
-            set(collection);
-        },
+			const root = await scanCollectionRoot(path);
+			const parsedItems = await parseCollectionItems([root]);
 
-        clear() {
-            set(null);
-        },
+			const collection: CurrentCollection = {
+				path,
+				name,
+				root: parsedItems[0],
+				metadata: { collectionName: name }
+			};
 
-        async refreshFile(filePath: string) {
-            const content = await window.electronAPI.readHttpFile(filePath);
-            const parsed = parseHttpFile(content);
+			set(collection);
+		},
 
-            update(collection => {
-                if (!collection) return null;
+		clear() {
+			let currentPath: string | null = null;
+			subscribe(currentCollection => {
+				if (currentCollection) {
+					currentPath = currentCollection.path;
+				}
+			})();
 
-                const updateItems = (items: CollectionItem[]): CollectionItem[] => {
-                    return items.map(item => {
-                        if (item.filePath === filePath) {
-                            return { ...item, sections: parsed.sections };
-                        }
-                        if (item.items) {
-                            return { ...item, items: updateItems(item.items) };
-                        }
-                        return item;
-                    });
-                };
+			if (currentPath) {
+				globalVariables.clear(currentPath);
+			}
 
-                return {
-                    ...collection,
-                    items: updateItems(collection.items)
-                };
-            });
-        }
-    };
+			set(null);
+		},
+
+		async refreshFile(filePath: string) {
+			const content = await window.electronAPI.readFile(filePath);
+			if (!content) {
+				return;
+			}
+
+			const parsed = parseHttpFile(content);
+
+			update((collection) => {
+				if (!collection) return null;
+
+				const updateItems = (items: CollectionItem[]): CollectionItem[] => {
+					return items.map((item) => {
+						if (item.filePath === filePath) {
+							return { ...item, sections: parsed.sections };
+						}
+						if (item.items) {
+							return { ...item, items: updateItems(item.items) };
+						}
+						return item;
+					});
+				};
+
+				return {
+					...collection,
+					root: updateItems([collection.root])[0]
+				};
+			});
+		}
+	};
 }
 
 export const currentCollection = createCurrentCollectionStore();
 
 export const hasCurrentCollection = derived(
-    currentCollection,
-    $currentCollection => $currentCollection !== null
+	currentCollection,
+	($currentCollection) => $currentCollection !== null
 );
 
 export const currentCollectionName = derived(
-    currentCollection,
-    $currentCollection => $currentCollection?.name ?? ''
+	currentCollection,
+	($currentCollection) => $currentCollection?.name ?? ''
 );
 
 export {};
-

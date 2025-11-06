@@ -1,4 +1,7 @@
 <script lang="ts">
+    import '@fontsource/inter/latin.css';
+    import '@fontsource/monaspace-neon/latin.css';
+
     import {onMount} from 'svelte';
     import PreferencesModal from '$lib/PreferencesModal.svelte';
     import Sidebar from '$lib/Sidebar.svelte';
@@ -11,6 +14,10 @@
         showPreferences = true;
     }
 
+    function handlePreferencesClose() {
+        showPreferences = false;
+    }
+
     onMount(() => {
         window.electronAPI.onPreferencesOpen(handlePreferencesOpen);
     });
@@ -18,15 +25,15 @@
 
 <ThemeProvider>
     <div class="main-layout">
-        <Sidebar />
+        <Sidebar/>
         <div class="main-content">
-            <MainView />
+            <MainView/>
         </div>
     </div>
 </ThemeProvider>
 
 {#if showPreferences}
-    <PreferencesModal/>
+    <PreferencesModal onClose={handlePreferencesClose}/>
 {/if}
 
 <style>

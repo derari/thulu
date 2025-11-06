@@ -1,24 +1,40 @@
 {
-  "name": "electron-sveltekit-typescript-template",
-  "productName": "Electron + Sveltekit + Typescript template",
+  "name": "thulu",
+  "productName": "Thulu",
   "version": "1.0.0",
   "description": "A template project for an Electron app with SvelteKit UI powered by Vite and written with Typescript",
-  "author": "Gurjot Sidhu <contact@thatgurjot.com> (https://thatgurjot.com/)",
-  "homepage": "https://buzo.tools/",
+  "author": "Arian Treffer <contact@cthul.org> (https://cthul.org/)",
+  "homepage": "https://cthul.org/",
   "main": "./dist/main.js",
   "scripts": {
     "dev": "cross-env NODE_ENV=dev npm run dev:all",
     "dev:all": "concurrently -n=svelte,electron -c='#ff3e00',blue \"npm run dev:svelte\" \"npm run dev:electron\"",
     "dev:svelte": "cd ./renderer/ && vite dev",
     "dev:electron": "tsc && electron ./dist/main.js",
+
     "build": "cross-env NODE_ENV=production npm run build:svelte && npm run build:electron",
     "build:svelte": "cd ./renderer/ && vite build",
-    "build:electron": "tsc && electron-builder build --mac --arm64 --config build.config.json",
+    "build:electron": "tsc",
+
+    "package": "npm run build && electron-builder --config build.config.json",
+    "package:win": "npm run build && electron-builder --win --config build.config.json",
+    "package:mac": "npm run build && electron-builder --mac --config build.config.json",
+    "package:linux": "npm run build && electron-builder --linux --config build.config.json",
+    "package:all": "npm run build && electron-builder --win --mac --linux --config build.config.json",
+
     "postinstall": "electron-builder install-app-deps",
-    "postinstallarm64": "electron-builder install-app-deps --arch arm64",
+    "postinstall:arm64": "electron-builder install-app-deps --arch arm64",
+
     "watch": "tsc -w",
     "lint": "eslint -c .eslintrc --ext .ts ./src",
-    "start": "npm run build && electron ./dist/main.js"
+    "start": "npm run build && electron ./dist/main.js",
+
+    "test": "npm run test:electron && npm run test:renderer",
+    "test:electron": "npx vitest run --dir src",
+    "test:renderer": "cd renderer && npm test",
+    "test:e2e": "cd renderer && npm run test:e2e",
+    "test:e2e:ui": "cd renderer && npm run test:e2e:ui",
+    "test:e2e:headed": "cd renderer && npm run test:e2e:headed"
   },
   "repository": "",
   "keywords": [
@@ -30,6 +46,8 @@
     "electron-builder"
   ],
   "devDependencies": {
+    "@types/http-cache-semantics": "^4.0.4",
+    "@types/responselike": "^1.0.3",
     "@typescript-eslint/eslint-plugin": "latest",
     "@typescript-eslint/parser": "latest",
     "concurrently": "latest",
@@ -43,6 +61,7 @@
     "vite": "latest"
   },
   "dependencies": {
-    "electron-serve": "latest"
+    "electron-serve": "latest",
+    "vitest": "^4.0.7"
   }
 }

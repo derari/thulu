@@ -1,0 +1,28 @@
+@baseUrl = https://jsonplaceholder.typicode.com
+@userId = 999
+@endpoint = /users
+
+### Section 1
+@userId = 1
+@endpoint = /todos
+GET {{baseUrl}}{{endpoint}}/{{userId}}
+
+> {% console.log("Section 1: Should use userId=1, endpoint=/todos"); %}
+
+### Section 2
+@userId = 2
+GET {{baseUrl}}{{endpoint}}/{{userId}}
+
+> {% console.log("Section 2: Should use userId=2, endpoint=/users (from file)"); %}
+
+### Section 3 (Uses File Variables)
+GET {{baseUrl}}{{endpoint}}/{{userId}}
+
+> {% console.log("Section 3: Should use userId=999, endpoint=/users (both from file)"); %}
+
+### Section 4 (Override baseUrl)
+@baseUrl = https://api.example.com
+GET {{baseUrl}}{{endpoint}}/{{userId}}
+
+> {% console.log("Section 4: Should use baseUrl from section, others from file"); %}
+

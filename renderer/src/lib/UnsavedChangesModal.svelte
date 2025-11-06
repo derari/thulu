@@ -16,7 +16,8 @@
 </script>
 
 <div class="modal-backdrop" on:click={onCancel} role="presentation">
-    <div class="modal" on:click|stopPropagation on:keydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+    <div aria-modal="true" class="modal" on:click|stopPropagation on:keydown={(e) => e.stopPropagation()} role="dialog"
+         tabindex="-1">
         <div class="modal-header">
             <h2>Unsaved Changes</h2>
         </div>
@@ -26,13 +27,13 @@
         </div>
 
         <div class="modal-actions">
-            <button class="save-button" on:click={handleSave} disabled={saving}>
+            <button class="save-button" disabled={saving} on:click={handleSave}>
                 {saving ? 'Saving...' : 'Save'}
             </button>
-            <button class="discard-button" on:click={onDiscard} disabled={saving}>
+            <button class="discard-button" disabled={saving} on:click={onDiscard}>
                 Discard Changes
             </button>
-            <button class="cancel-button" on:click={onCancel} disabled={saving}>
+            <button class="cancel-button" disabled={saving} on:click={onCancel}>
                 Cancel
             </button>
         </div>

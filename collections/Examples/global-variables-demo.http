@@ -1,0 +1,67 @@
+### Login and Set Token
+
+@ asd = 1
+
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+
+{
+  "title": "Login Request",
+  "body": "Simulating login",
+  "userId": 1
+}
+
+> {%
+// Simulate extracting a token from the response
+const fakeToken = "jwt-" + Date.now();
+client.global.set("authToken", fakeToken);
+console.log("Auth token set:", fakeToken);
+%}
+
+### Use Token from Global Variable
+GET https://jsonplaceholder.typicode.com/posts/1
+Authorization: Bearer {{authToken}}
+
+> {%
+console.log("Request completed with token:", "{{authToken}}");
+%}
+
+### Update User ID
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+  "title": "Create Post",
+  "body": "Post content",
+  "userId": 1
+}
+
+> {%
+// Store the created post ID
+const postId = "123";
+client.global.set("lastPostId", postId);
+console.log("Stored post ID:", postId);
+%}
+
+### Delete Post Using Global Variable
+DELETE https://jsonplaceholder.typicode.com/posts/{{lastPostId}}
+
+> {%
+console.log("Deleted post with ID:", "{{lastPostId}}");
+%}
+
+### Set Multiple Variables
+
+@ asd = 1
+
+GET https://jsonplaceholder.typicode.com/users/1
+
+> {%
+// Set multiple global variables at once
+client.global.set("baseUrl", "https://api.example.com");
+client.global.set("apiVersion", "v2");
+client.global.set("userId", "1");
+console.log("Set multiple global variables");
+%}
+

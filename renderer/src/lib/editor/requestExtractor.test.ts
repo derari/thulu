@@ -1,178 +1,385 @@
-import { describe, it, expect } from 'vitest';
-import { extractRequestFromSection } from './requestExtractor';
+import { describe, expect, it } from 'vitest';
+import { extractRequest } from './requestExtractor';
+import type { ParsedHttpFile } from './httpParser';
 
-describe('extractRequestFromSection', () => {
-    it('should extract simple GET request', () => {
-        const content = `### Get Users
-GET https://api.example.com/users`;
+describe('extractRequest', () => {
+	describe('section finding by line number', () => {
+		it('should find section when line number is at section start', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Get Users',
+						startLineNumber: 1,
+						endLineNumber: 3,
+						verb: 'GET',
+						verbLine: 2,
+						url: 'https://api.example.com/users',
+						isDivider: false
+					}
+				],
+				lines: ['### Get Users', 'GET https://api.example.com/users']
+			};
 
-        const result = extractRequestFromSection(content, 1);
+			const result = extractRequest(parsed, 1);
 
-        expect(result).toEqual({
-            verb: 'GET',
-            url: 'https://api.example.com/users',
-            headers: {},
-            body: ''
-        });
-    });
+			expect(result).not.toBeNull();
+			expect(result?.verb).toBe('GET');
+			expect(result?.url).toBe('https://api.example.com/users');
+		});
 
-    it('should extract POST request with headers and body', () => {
-        const content = `### Create User
-POST https://api.example.com/users
-Content-Type: application/json
-Authorization: Bearer token123
+		it('should find section when line number is within section', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Get Users',
+						startLineNumber: 1,
+						endLineNumber: 4,
+						verb: 'GET',
+						verbLine: 2,
+						url: 'https://api.example.com/users',
+						isDivider: false,
+						headers: {
+							startLineNumber: 3,
+							endLineNumber: 4,
+							headers: { 'Authorization': 'Bearer token' }
+						}
+					}
+				],
+				lines: ['### Get Users', 'GET https://api.example.com/users', 'Authorization: Bearer token']
+			};
 
-{
-  "name": "John",
-  "email": "john@example.com"
-}`;
+			const result = extractRequest(parsed, 2);
 
-        const result = extractRequestFromSection(content, 1);
+			expect(result).not.toBeNull();
+			expect(result?.verb).toBe('GET');
+		});
 
-        expect(result).toEqual({
-            verb: 'POST',
-            url: 'https://api.example.com/users',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer token123'
-            },
-            body: '{\n  "name": "John",\n  "email": "john@example.com"\n}'
-        });
-    });
+		it('should find correct section in multi-section file', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'First Request',
+						startLineNumber: 1,
+						endLineNumber: 4,
+						verb: 'GET',
+						verbLine: 2,
+						url: 'https://api.example.com/first',
+						isDivider: false
+					},
+					{
+						name: 'Second Request',
+						startLineNumber: 4,
+						endLineNumber: 6,
+						verb: 'POST',
+						verbLine: 5,
+						url: 'https://api.example.com/second',
+						isDivider: false
+					}
+				],
+				lines: ['### First Request', 'GET https://api.example.com/first', '', '### Second Request', 'POST https://api.example.com/second']
+			};
 
-    it('should extract request with multiple headers', () => {
-        const content = `### Test Request
-PUT https://api.example.com/test
-Content-Type: application/json
-Accept: application/json
-X-Custom-Header: value
+			const firstResult = extractRequest(parsed, 1);
+			const secondResult = extractRequest(parsed, 4);
 
-{"test": true}`;
+			expect(firstResult?.verb).toBe('GET');
+			expect(firstResult?.url).toBe('https://api.example.com/first');
+			expect(secondResult?.verb).toBe('POST');
+			expect(secondResult?.url).toBe('https://api.example.com/second');
+		});
 
-        const result = extractRequestFromSection(content, 1);
+		it('should return null when line number is before any section', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 3 },
+				sections: [
+					{
+						name: 'First Request',
+						startLineNumber: 3,
+						endLineNumber: 5,
+						verb: 'GET',
+						verbLine: 4,
+						url: 'https://api.example.com',
+						isDivider: false
+					}
+				],
+				lines: ['# Preamble comment', '', '### First Request', 'GET https://api.example.com']
+			};
 
-        expect(result).toEqual({
-            verb: 'PUT',
-            url: 'https://api.example.com/test',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-Custom-Header': 'value'
-            },
-            body: '{"test": true}'
-        });
-    });
+			const result = extractRequest(parsed, 1);
 
-    it('should handle request without body', () => {
-        const content = `### Delete User
-DELETE https://api.example.com/users/1
-Authorization: Bearer token123`;
+			expect(result).toBeNull();
+		});
+	});
 
-        const result = extractRequestFromSection(content, 1);
+	describe('request extraction', () => {
+		it('should return null for section without verb', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Divider',
+						startLineNumber: 1,
+						endLineNumber: 3,
+						isDivider: true
+					}
+				],
+				lines: ['### Divider', 'Just some text']
+			};
 
-        expect(result).toEqual({
-            verb: 'DELETE',
-            url: 'https://api.example.com/users/1',
-            headers: {
-                'Authorization': 'Bearer token123'
-            },
-            body: ''
-        });
-    });
+			const result = extractRequest(parsed, 1);
 
-    it('should stop at next section marker', () => {
-        const content = `### First Request
-GET https://api.example.com/first
+			expect(result).toBeNull();
+		});
 
-### Second Request
-GET https://api.example.com/second`;
+		it('should extract verb and url from section', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Test',
+						startLineNumber: 1,
+						endLineNumber: 3,
+						verb: 'POST',
+						verbLine: 2,
+						url: 'https://api.example.com/test',
+						isDivider: false
+					}
+				],
+				lines: ['### Test', 'POST https://api.example.com/test']
+			};
 
-        const result = extractRequestFromSection(content, 1);
+			const result = extractRequest(parsed, 1);
 
-        expect(result).toEqual({
-            verb: 'GET',
-            url: 'https://api.example.com/first',
-            headers: {},
-            body: ''
-        });
-    });
+			expect(result?.verb).toBe('POST');
+			expect(result?.url).toBe('https://api.example.com/test');
+		});
 
-    it('should return null for section without verb', () => {
-        const content = `### Divider
-Just some text`;
+		it('should extract headers when present', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 5,
+						verb: 'GET',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false,
+						headers: {
+							startLineNumber: 3,
+							endLineNumber: 5,
+							headers: {
+								'Content-Type': 'application/json',
+								'Authorization': 'Bearer token'
+							}
+						}
+					}
+				],
+				lines: ['### Request', 'GET https://api.example.com', 'Content-Type: application/json', 'Authorization: Bearer token']
+			};
 
-        const result = extractRequestFromSection(content, 1);
+			const result = extractRequest(parsed, 1);
 
-        expect(result).toBeNull();
-    });
+			expect(result?.headers).toEqual({
+				'Content-Type': 'application/json',
+				'Authorization': 'Bearer token'
+			});
+		});
 
-    it('should handle section at end of file', () => {
-        const content = `### Get Users
-GET https://api.example.com/users
-Authorization: Bearer token
+		it('should return empty headers object when no headers', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 3,
+						verb: 'GET',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false
+					}
+				],
+				lines: ['### Request', 'GET https://api.example.com']
+			};
 
-### Last Request
-POST https://api.example.com/last
-Content-Type: application/json
+			const result = extractRequest(parsed, 1);
 
-{"data": "test"}`;
+			expect(result?.headers).toEqual({});
+		});
+	});
 
-        const result = extractRequestFromSection(content, 5);
+	describe('body extraction', () => {
+		it('should return null when section has no body', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 3,
+						verb: 'GET',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false
+					}
+				],
+				lines: ['### Request', 'GET https://api.example.com']
+			};
 
-        expect(result).toEqual({
-            verb: 'POST',
-            url: 'https://api.example.com/last',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: '{"data": "test"}'
-        });
-    });
+			const result = extractRequest(parsed, 1);
 
-    it('should skip comments when finding request line', () => {
-        const content = `### First Request
+			expect(result?.body).toBeNull();
+		});
 
-# this is a comment
+		it('should extract single line body', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 5,
+						verb: 'POST',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false,
+						body: {
+							startLineNumber: 4,
+							endLineNumber: 5
+						}
+					}
+				],
+				lines: ['### Request', 'POST https://api.example.com', '', '{"test": true}']
+			};
 
-GET http://localhost/path
-Authorization: Bearer token
+			const result = extractRequest(parsed, 1);
 
-# this is more comment`;
+			expect(result?.body).toBe('{"test": true}');
+		});
 
-        const result = extractRequestFromSection(content, 1);
+		it('should extract multi-line body', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 8,
+						verb: 'POST',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false,
+						body: {
+							startLineNumber: 4,
+							endLineNumber: 8
+						}
+					}
+				],
+				lines: ['### Request', 'POST https://api.example.com', '', '{', '  "name": "John",', '  "email": "test@example.com"', '}', '']
+			};
 
-        expect(result).toEqual({
-            verb: 'GET',
-            url: 'http://localhost/path',
-            headers: {
-                'Authorization': 'Bearer token'
-            },
-            body: ''
-        });
-    });
+			const result = extractRequest(parsed, 1);
 
-    it('should handle XML body', () => {
-        const content = `### Third Request
+			expect(result?.body).toBe('{\n  "name": "John",\n  "email": "test@example.com"\n}');
+		});
 
-POST http://localhost/path
-Authorization: Bearer token
-Content-Type: application/xml
+		it('should extract body after headers', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 6,
+						verb: 'POST',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false,
+						headers: {
+							startLineNumber: 3,
+							endLineNumber: 4,
+							headers: {
+								'Content-Type': 'application/json'
+							}
+						},
+						body: {
+							startLineNumber: 5,
+							endLineNumber: 6
+						}
+					}
+				],
+				lines: ['### Request', 'POST https://api.example.com', 'Content-Type: application/json', '', '{"data": "test"}']
+			};
 
-<xml>
-    <foo>1</foo>
-</xml>`;
+			const result = extractRequest(parsed, 1);
 
-        const result = extractRequestFromSection(content, 1);
+			expect(result?.body).toBe('{"data": "test"}');
+		});
 
-        expect(result).toEqual({
-            verb: 'POST',
-            url: 'http://localhost/path',
-            headers: {
-                'Authorization': 'Bearer token',
-                'Content-Type': 'application/xml'
-            },
-            body: '<xml>\n    <foo>1</foo>\n</xml>'
-        });
-    });
+		it('should extract XML body', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'Request',
+						startLineNumber: 1,
+						endLineNumber: 7,
+						verb: 'POST',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false,
+						body: {
+							startLineNumber: 4,
+							endLineNumber: 7
+						}
+					}
+				],
+				lines: ['### Request', 'POST https://api.example.com', '', '<xml>', '    <foo>1</foo>', '</xml>']
+			};
+
+			const result = extractRequest(parsed, 1);
+
+			expect(result?.body).toBe('<xml>\n    <foo>1</foo>\n</xml>');
+		});
+
+		it('should extract body only up to body section end', () => {
+			const parsed: ParsedHttpFile = {
+				preamble: { startLineNumber: 1, endLineNumber: 1 },
+				sections: [
+					{
+						name: 'First',
+						startLineNumber: 1,
+						endLineNumber: 6,
+						verb: 'POST',
+						verbLine: 2,
+						url: 'https://api.example.com',
+						isDivider: false,
+						body: {
+							startLineNumber: 4,
+							endLineNumber: 5
+						}
+					},
+					{
+						name: 'Second',
+						startLineNumber: 6,
+						endLineNumber: 8,
+						verb: 'GET',
+						verbLine: 7,
+						url: 'https://api.example.com',
+						isDivider: false
+					}
+				],
+				lines: ['### First', 'POST https://api.example.com', '', '{"first": true}', '', '### Second', 'GET https://api.example.com']
+			};
+
+			const result = extractRequest(parsed, 1);
+
+			expect(result?.body).toBe('{"first": true}');
+		});
+	});
 });
-

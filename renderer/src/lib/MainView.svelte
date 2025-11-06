@@ -1,15 +1,15 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import {onMount} from 'svelte';
     import CollectionsOverview from './CollectionsOverview.svelte';
     import HttpEditor from '$lib/editor/HttpEditor.svelte';
     import ResponseView from './ResponseView.svelte';
     import EnvironmentsView from './EnvironmentsView.svelte';
-    import { openFile } from './stores/openFile.js';
-    import { openEnvironments } from './stores/openEnvironments.js';
+    import {openFile} from './stores/openFile.js';
+    import {openEnvironments} from './stores/openEnvironments.js';
 
-    var editorContent: string = '';
-    var windowWidth: number = 1200;
-    var orientation: 'horizontal' | 'vertical' = 'vertical';
+    let editorContent: string = '';
+    let windowWidth: number = 1200;
+    let orientation: 'horizontal' | 'vertical' = 'vertical';
 
     $: orientation = windowWidth < 1200 ? 'horizontal' : 'vertical';
 
@@ -28,26 +28,27 @@
     });
 </script>
 
-<svelte:window bind:innerWidth={windowWidth} />
+<svelte:window bind:innerWidth={windowWidth}/>
 
 <div class="main-view">
     {#if $openFile}
-        <div class="editor-layout" class:horizontal={orientation === 'horizontal'} class:vertical={orientation === 'vertical'}>
+        <div class="editor-layout" class:horizontal={orientation === 'horizontal'}
+             class:vertical={orientation === 'vertical'}>
             <div class="editor-panel">
                 <HttpEditor
-                    bind:content={editorContent}
-                    sectionLineNumber={$openFile.sectionLineNumber}
+                        bind:content={editorContent}
+                        sectionLineNumber={$openFile.sectionLineNumber}
                 />
             </div>
-            <ResponseView {orientation} />
+            <ResponseView {orientation}/>
         </div>
     {:else if $openEnvironments}
         <EnvironmentsView
-            environmentConfig={$openEnvironments.environmentConfig}
-            collectionRoot={$openEnvironments.collectionRoot}
+                environmentConfig={$openEnvironments.environmentConfig}
+                collectionRoot={$openEnvironments.collectionRoot}
         />
     {:else}
-        <CollectionsOverview />
+        <CollectionsOverview/>
     {/if}
 </div>
 

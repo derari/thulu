@@ -1,38 +1,14 @@
-// hello copilot
-import {app, BrowserWindow, ipcMain, Menu, dialog} from "electron";
+import {app, BrowserWindow, dialog, ipcMain, shell, Menu} from 'electron';
 import * as path from "path";
 import * as fs from "fs";
 import serve from 'electron-serve';
+import {loadPreferences, savePreferences, readFile, writeFile, listDirectory, fileExists, deletePath, renamePath, createFolder, createFile, updateCollectionName} from './fileOperations.js';
+import {executeScript, type ScriptExecutionParams} from './scriptExecutor.js';
 
 const serveURL = serve({directory: '.'});
 const isDev: boolean = !app.isPackaged;
 const port: string = process.env.PORT ? process.env.PORT.toString() : '5173';
-const preferencesFileName = 'preferences.json';
 let mainWindow: BrowserWindow | null;
-
-function getPreferencesFilePath() {
-    return path.join(app.getPath('userData'), preferencesFileName);
-}
-
-function loadPreferences(): Preferences {
-    const filePath = getPreferencesFilePath();
-    if (fs.existsSync(filePath)) {
-        const data = fs.readFileSync(filePath, 'utf-8');
-        const prefs = JSON.parse(data) as Preferences;
-        const windowWidth = prefs.windowWidth && prefs.windowWidth >= 50 ? prefs.windowWidth : 800;
-        const windowHeight = prefs.windowHeight && prefs.windowHeight >= 50 ? prefs.windowHeight : 600;
-        const sidebarWidth = prefs.sidebarWidth && prefs.sidebarWidth >= 50 ? prefs.sidebarWidth : 100;
-        return {...prefs, windowWidth, windowHeight, sidebarWidth};
-    }
-    return {appearance: 'system', windowWidth: 800, windowHeight: 600, sidebarWidth: 100};
-}
-
-function savePreferences(partial: Partial<Preferences>) {
-    const filePath = getPreferencesFilePath();
-    const current = loadPreferences();
-    const updated = {...current, ...partial};
-    fs.writeFileSync(filePath, JSON.stringify(updated));
-}
 
 function sendPreferencesToRenderer() {
     if (mainWindow) {
@@ -70,8 +46,7 @@ function launchMainWindow() {
     mainWindow.once('close', function handleClose() {
         if (mainWindow) {
             const [width, height] = mainWindow.getSize();
-            const prefs = loadPreferences();
-            savePreferences({...prefs, windowWidth: width, windowHeight: height});
+            savePreferences({windowWidth: width, windowHeight: height});
         }
         mainWindow = null;
     });
@@ -81,109 +56,6 @@ function launchMainWindow() {
         return;
     }
     serveURL(mainWindow);
-}
-
-function getProcessVersions() {
-  const processVersions: ProcessVersions = process.versions;
-  console.log("sending processVersions to IPC to pass on to renderer");
-  return processVersions;
-}
-
-interface ScannedCollectionItem {
-  title: string;
-  folderPath?: string;
-  filePath?: string;
-  items?: ScannedCollectionItem[];
-  environments?: {
-    folderPath: string;
-    hasPublicEnv: boolean;
-    hasPrivateEnv: boolean;
-  };
-}
-
-function scanCollectionFolder(folderPath: string): ScannedCollectionItem[] {
-  if (!fs.existsSync(folderPath)) {
-    return [];
-  }
-
-  const entries = fs.readdirSync(folderPath, { withFileTypes: true });
-  const itemMap = new Map<string, ScannedCollectionItem>();
-
-  for (const entry of entries) {
-    if (entry.name.startsWith('.')) {
-      continue;
-    }
-
-    if (entry.name === 'http-client.env.json' || entry.name === 'http-client.private.env.json') {
-      continue;
-    }
-
-    const fullPath = path.join(folderPath, entry.name);
-
-    if (entry.isDirectory()) {
-      let existing = itemMap.get(entry.name);
-      if (!existing) {
-        existing = { title: entry.name };
-        itemMap.set(entry.name, existing);
-      }
-
-      existing.folderPath = fullPath;
-      existing.items = scanCollectionFolder(fullPath);
-
-      const publicEnvPath = path.join(fullPath, 'http-client.env.json');
-      const privateEnvPath = path.join(fullPath, 'http-client.private.env.json');
-      const hasPublicEnv = fs.existsSync(publicEnvPath);
-      const hasPrivateEnv = fs.existsSync(privateEnvPath);
-
-      if (hasPublicEnv || hasPrivateEnv) {
-        existing.environments = {
-          folderPath: fullPath,
-          hasPublicEnv,
-          hasPrivateEnv
-        };
-      }
-
-      continue;
-    }
-
-    if (entry.isFile() && entry.name.endsWith('.http')) {
-      const title = entry.name.substring(0, entry.name.length - 5);
-      const existing = itemMap.get(title);
-      if (existing) {
-        existing.filePath = fullPath;
-      }
-      if (!existing) {
-        itemMap.set(title, {
-          title: title,
-          filePath: fullPath
-        });
-      }
-    }
-  }
-
-  return Array.from(itemMap.values());
-}
-
-function scanCollectionRoot(folderPath: string): ScannedCollectionItem[] {
-  const items = scanCollectionFolder(folderPath);
-
-  const publicEnvPath = path.join(folderPath, 'http-client.env.json');
-  const privateEnvPath = path.join(folderPath, 'http-client.private.env.json');
-  const hasPublicEnv = fs.existsSync(publicEnvPath);
-  const hasPrivateEnv = fs.existsSync(privateEnvPath);
-
-  if (hasPublicEnv || hasPrivateEnv) {
-    items.unshift({
-      title: 'Environments',
-      environments: {
-        folderPath,
-        hasPublicEnv,
-        hasPrivateEnv
-      }
-    });
-  }
-
-  return items;
 }
 
 async function openCollection() {
@@ -274,27 +146,40 @@ app.on("window-all-closed", function handleWindowAllClosed() {
 });
 
 app.once('ready', function handleIPCReady() {
-    ipcMain.handle('renderer:requestProcessVersions', function handleRequestProcessVersions() {
-        console.log("Renderer is asking for process versions");
-        return getProcessVersions();
+    ipcMain.handle('fs:listDirectory', function handleListDirectory(event, dirPath: string) {
+        return listDirectory(dirPath);
     });
-    ipcMain.handle('collection:loadItems', function handleLoadCollectionItems(event, collectionPath: string) {
-        return scanCollectionRoot(collectionPath);
+    ipcMain.handle('fs:readFile', function handleReadFile(event, filePath: string) {
+        return readFile(filePath);
     });
-    ipcMain.handle('http:readFile', function handleReadHttpFile(event, filePath: string) {
-        if (!fs.existsSync(filePath)) {
-            return '';
+    ipcMain.handle('fs:writeFile', function handleWriteFile(event, filePath: string, content: string) {
+        return writeFile(filePath, content);
+    });
+    ipcMain.handle('fs:fileExists', function handleFileExists(event, filePath: string) {
+        return fileExists(filePath);
+    });
+    ipcMain.handle('fs:deletePath', function handleDeletePath(event, filePath: string) {
+        return deletePath(filePath);
+    });
+    ipcMain.handle('fs:renamePath', function handleRenamePath(event, oldPath: string, newPath: string) {
+        return renamePath(oldPath, newPath);
+    });
+    ipcMain.handle('fs:createFolder', function handleCreateFolder(event, folderPath: string) {
+        return createFolder(folderPath);
+    });
+    ipcMain.handle('fs:createFile', function handleCreateFile(event, filePath: string, content: string) {
+        return createFile(filePath, content);
+    });
+    ipcMain.handle('collection:updateName', function handleUpdateCollectionName(event, collectionPath: string, newName: string) {
+        const result = updateCollectionName(collectionPath, newName);
+        if (result.success) {
+            sendPreferencesToRenderer();
         }
-        return fs.readFileSync(filePath, 'utf-8');
+        return result;
     });
-    ipcMain.handle('http:writeFile', function handleWriteHttpFile(event, filePath: string, content: string) {
-        try {
-            fs.writeFileSync(filePath, content, 'utf-8');
-            return { success: true };
-        } catch (error) {
-            console.error('Error writing file:', error);
-            return { success: false, error: String(error) };
-        }
+    ipcMain.handle('system:showInFileSystem', async function handleShowInFileSystem(event, path: string) {
+        await shell.openPath(path);
+        return { success: true };
     });
     ipcMain.on('preferences:save', function handlePreferencesSave(event, preferences: Preferences) {
         savePreferences(preferences);
@@ -329,5 +214,8 @@ app.once('ready', function handleIPCReady() {
             headers,
             body
         };
+    });
+    ipcMain.handle('script:execute', function handleScriptExecute(event, params: ScriptExecutionParams) {
+        return executeScript(params);
     });
 });

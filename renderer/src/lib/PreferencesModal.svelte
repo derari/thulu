@@ -1,6 +1,8 @@
 <script lang="ts">
     import {onMount} from 'svelte';
 
+    export var onClose: () => void;
+
     var appearanceOptions = [
         {value: 'system', label: 'System'},
         {value: 'dark', label: 'Dark'},
@@ -8,29 +10,17 @@
     ];
 
     var selectedAppearance: string = 'system';
-    var showModal = false;
-
-    function openModal() {
-        showModal = true;
-    }
-
-    function closeModal() {
-        showModal = false;
-    }
 
     function savePreferences() {
         window.electronAPI.savePreferences({appearance: selectedAppearance} as Preferences);
-        closeModal();
+        onClose();
     }
 
     function cancelPreferences() {
-        closeModal();
+        onClose();
     }
 
     onMount(() => {
-        window.electronAPI.onPreferencesOpen(() => {
-            openModal();
-        });
         window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
             selectedAppearance = preferences.appearance ?? 'system';
         });
@@ -38,26 +28,24 @@
     });
 </script>
 
-{#if showModal}
-    <div class="modal-backdrop">
-        <div class="modal">
-            <h2>Preferences</h2>
-            <div>
-                <h3>Appearance</h3>
-                {#each appearanceOptions as option}
-                    <label>
-                        <input type="radio" bind:group={selectedAppearance} value={option.value}/>
-                        {option.label}
-                    </label>
-                {/each}
-            </div>
-            <div class="modal-actions">
-                <button on:click={savePreferences}>Save</button>
-                <button on:click={cancelPreferences}>Cancel</button>
-            </div>
+<div class="modal-backdrop">
+    <div class="modal">
+        <h2>Preferences</h2>
+        <div>
+            <h3>Appearance</h3>
+            {#each appearanceOptions as option}
+                <label>
+                    <input type="radio" bind:group={selectedAppearance} value={option.value}/>
+                    {option.label}
+                </label>
+            {/each}
+        </div>
+        <div class="modal-actions">
+            <button on:click={savePreferences}>Save</button>
+            <button on:click={cancelPreferences}>Cancel</button>
         </div>
     </div>
-{/if}
+</div>
 
 <style>
     .modal-backdrop {

@@ -1,0 +1,24 @@
+### Test Request with Post-Script
+
+GET https://jsonplaceholder.typicode.com/todos/1
+
+> {% console.log("Script executed!"); %}
+
+### Test with Multiple Scripts
+
+GET https://jsonplaceholder.typicode.com/users/1
+
+> {%
+console.log("First script");
+const message = "Hello from post-script";
+console.log(message);
+%}
+
+> {% console.log("Second script"); %}
+
+### Test with Simple File Script
+
+GET https://jsonplaceholder.typicode.com/posts/1
+
+> console.log("Simple file-type script");
+

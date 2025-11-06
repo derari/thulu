@@ -1,64 +1,73 @@
-import { writable, get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { OpenFile } from '../collection';
 import { currentCollection } from './currentCollection.js';
 
 interface OpenFileState extends OpenFile {
-    isDirty: boolean;
+	isDirty: boolean;
 }
 
 function createOpenFileStore() {
-    const store = writable<OpenFileState | null>(null);
-    const { subscribe, set, update } = store;
+	const store = writable<OpenFileState | null>(null);
+	const { subscribe, set, update } = store;
 
-    return {
-        subscribe,
+	return {
+		subscribe,
 
-        async openFile(filePath: string, sectionLineNumber?: number) {
-            const content = await window.electronAPI.readHttpFile(filePath);
-            set({
-                filePath,
-                content,
-                sectionLineNumber,
-                isDirty: false
-            });
-        },
+		async openFile(filePath: string, sectionLineNumber?: number) {
+			const content = await window.electronAPI.readFile(filePath);
+			set({
+				filePath,
+				content: content ?? '',
+				sectionLineNumber,
+				isDirty: false
+			});
+		},
 
-        updateContent(content: string) {
-            update(file => {
-                if (!file) return null;
-                return { ...file, content, isDirty: true };
-            });
-        },
+		jumpToSection(sectionLineNumber?: number) {
+			update((file) => {
+				if (!file) return null;
+				return { ...file, sectionLineNumber };
+			});
+		},
 
-        async save(): Promise<{ success: boolean }> {
-            const currentFile = get(store);
+		updateContent(content: string) {
+			update((file) => {
+				if (!file) return null;
+				return { ...file, content, isDirty: true };
+			});
+		},
 
-            if (!currentFile || !currentFile.isDirty) {
-                return { success: true };
-            }
+		async save(): Promise<{ success: boolean }> {
+			const currentFile = get(store);
 
-            const result = await window.electronAPI.writeHttpFile(currentFile.filePath, currentFile.content);
+			if (!currentFile || !currentFile.isDirty) {
+				return { success: true };
+			}
 
-            if (result.success) {
-                update(file => {
-                    if (!file) return null;
-                    return { ...file, isDirty: false };
-                });
+			const result = await window.electronAPI.writeFile(
+				currentFile.filePath,
+				currentFile.content
+			);
 
-                // Refresh the collection to update sections in sidebar
-                await currentCollection.refreshFile(currentFile.filePath);
-            }
+			if (result.success) {
+				update((file) => {
+					if (!file) return null;
+					return { ...file, isDirty: false };
+				});
 
-            return result;
-        },
+				// Refresh the collection to update sections in sidebar
+				await currentCollection.refreshFile(currentFile.filePath);
+			}
 
-        close() {
-            set(null);
-        }
-    };
+			return result;
+		},
+
+		close() {
+			set(null);
+		}
+	};
 }
 
 export const openFile = createOpenFileStore();
 
 export {};
-

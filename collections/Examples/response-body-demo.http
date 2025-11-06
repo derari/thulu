@@ -1,0 +1,120 @@
+### Get User - Extract Data from JSON Response
+GET https://jsonplaceholder.typicode.com/users/1
+
+> {%
+// Response body is automatically parsed as JSON
+console.log("User name:", response.body.name);
+console.log("User email:", response.body.email);
+
+// Store values as global variables
+client.global.set("userName", response.body.name);
+client.global.set("userEmail", response.body.email);
+client.global.set("userId", String(response.body.id));
+%}
+
+### Get Posts - Work with JSON Array
+GET https://jsonplaceholder.typicode.com/posts
+
+> {%
+// Response is a JSON array
+console.log("Total posts:", response.body.length);
+console.log("First post title:", response.body[0].title);
+
+// Store the first post ID
+const firstPostId = String(response.body[0].id);
+client.global.set("firstPostId", firstPostId);
+console.log("Stored first post ID:", firstPostId);
+%}
+
+### Create Post - Extract ID from Response
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+  "title": "My New Post",
+  "body": "This is the post content",
+  "userId": 1
+}
+
+> {%
+// Extract the created post ID
+const postId = String(response.body.id);
+client.global.set("createdPostId", postId);
+
+console.log("Created post with ID:", postId);
+console.log("Post title:", response.body.title);
+%}
+
+### Use Stored Post ID
+GET https://jsonplaceholder.typicode.com/posts/{{createdPostId}}
+
+> {%
+console.log("Retrieved post:", response.body.title);
+%}
+
+### Login Flow Simulation
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "password123"
+}
+
+> {%
+// In a real API, you'd extract the token from the response
+// For this demo, we'll create a fake token
+const fakeToken = "bearer-" + Date.now();
+const userId = String(response.body.id);
+
+client.global.set("authToken", fakeToken);
+client.global.set("currentUserId", userId);
+
+console.log("Login successful!");
+console.log("Token:", fakeToken);
+console.log("User ID:", userId);
+%}
+
+### Use Auth Token in Subsequent Request
+GET https://jsonplaceholder.typicode.com/users/{{currentUserId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+console.log("Authenticated request completed");
+console.log("User data:", response.body.name);
+%}
+
+### Complex Nested JSON
+GET https://jsonplaceholder.typicode.com/users/1
+
+> {%
+// Access nested properties
+const city = response.body.address.city;
+const company = response.body.company.name;
+
+client.global.set("userCity", city);
+client.global.set("userCompany", company);
+
+console.log("User lives in:", city);
+console.log("Works at:", company);
+console.log("Coordinates:",
+  response.body.address.geo.lat,
+  response.body.address.geo.lng
+);
+%}
+
+### Plain Text Response
+GET https://jsonplaceholder.typicode.com/posts/1
+
+> {%
+// If response is not JSON, body is a string
+console.log("Response type:", typeof response.body);
+
+// You can still work with it as JSON if it's JSON
+if (typeof response.body === 'object') {
+  console.log("Title:", response.body.title);
+} else {
+  console.log("Plain text response:", response.body);
+}
+%}
+

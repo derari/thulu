@@ -1,105 +1,134 @@
-import { ViewPlugin, Decoration, EditorView } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
+import type { ParsedHttpFile, ParsedHttpResponse } from './httpParser';
 
 const bodyLineDecoration = Decoration.line({
-    attributes: { class: 'http-body-line' }
+	attributes: { class: 'http-body-line' }
 });
 
-const errorLineDecoration = Decoration.line({
-    attributes: { class: 'http-body-line http-body-error-line' }
-});
+interface BodyRange {
+	startLine: number;
+	endLine: number;
+}
 
-export const httpBodyLineBackground = ViewPlugin.fromClass(class {
-    decorations: DecorationSet;
+interface HttpBodyLineBackgroundConfig {
+	mode?: 'request' | 'response';
+	parsedFile?: ParsedHttpFile | null;
+	parsedResponse?: ParsedHttpResponse | null;
+}
 
-    constructor(view: EditorView) {
-        this.decorations = this.buildDecorations(view);
-    }
+function getBodyRanges(
+	parsedFile: ParsedHttpFile | null,
+	parsedResponse: ParsedHttpResponse | null,
+	mode: 'request' | 'response'
+): BodyRange[] {
+	const ranges: BodyRange[] = [];
 
-    update(update: any) {
-        if (update.docChanged || update.viewportChanged) {
-            this.decorations = this.buildDecorations(update.view);
-        }
-    }
+	if (mode === 'request' && parsedFile) {
+		for (const section of parsedFile.sections) {
+			if (section.body) {
+				ranges.push({
+					startLine: section.body.startLineNumber,
+					endLine: section.body.endLineNumber
+				});
+			}
 
-    buildDecorations(view: EditorView): DecorationSet {
-        const builder = new RangeSetBuilder<Decoration>();
-        const doc = view.state.doc;
+			// Add post-script ranges
+			if (section.postScripts) {
+				for (const postScript of section.postScripts) {
+					ranges.push({
+						startLine: postScript.startLineNumber,
+						endLine: postScript.endLineNumber
+					});
+				}
+			}
+		}
+	}
 
-        let inBody = false;
-        let inHeaders = false;
-        let foundRequest = false;
-        let hadEmptyLineAfterHeaders = false;
-        let lastNonEmptyLineWasHeader = false;
+	if (mode === 'response' && parsedResponse?.body) {
+		ranges.push({
+			startLine: parsedResponse.body.startLineNumber,
+			endLine: parsedResponse.body.endLineNumber
+		});
+	}
 
-        for (let line = 1; line <= doc.lines; line++) {
-            const lineObj = doc.line(line);
-            const text = lineObj.text;
+	return ranges;
+}
 
-            // Section marker resets state
-            if (text.startsWith('###')) {
-                inBody = false;
-                inHeaders = false;
-                foundRequest = false;
-                hadEmptyLineAfterHeaders = false;
-                lastNonEmptyLineWasHeader = false;
-                continue;
-            }
+function isLineInBody(lineNumber: number, bodyRanges: BodyRange[]): boolean {
+	for (const range of bodyRanges) {
+		if (lineNumber >= range.startLine && lineNumber < range.endLine) {
+			return true;
+		}
+	}
+	return false;
+}
 
-            // Empty lines (not comments)
-            if (text.trim() === '') {
-                if (inHeaders && lastNonEmptyLineWasHeader) {
-                    hadEmptyLineAfterHeaders = true;
-                }
-                continue;
-            }
+export function createHttpBodyLineBackground(config: HttpBodyLineBackgroundConfig = {}) {
+	const mode = config.mode || 'request';
+	const parsedFileRef = { current: config.parsedFile || null };
+	const parsedResponseRef = { current: config.parsedResponse || null };
 
-            // Comment (outside body)
-            if (!inBody && text.startsWith('#')) {
-                // Comments don't count as empty line separator
-                continue;
-            }
+	return {
+		plugin: ViewPlugin.fromClass(
+			class {
+				decorations: DecorationSet;
+				bodyRanges: BodyRange[];
 
-            // HTTP verb (request) or HTTP status line (response) starts headers
-            if (!foundRequest && (/^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE|CONNECT)\s/.test(text) || /^HTTP\/[\d.]+/.test(text))) {
-                foundRequest = true;
-                inHeaders = true;
-                lastNonEmptyLineWasHeader = false;
-                continue;
-            }
+				constructor(view: EditorView) {
+					this.bodyRanges = getBodyRanges(
+						parsedFileRef.current,
+						parsedResponseRef.current,
+						mode
+					);
+					this.decorations = this.buildDecorations(view);
+				}
 
-            // Header line (Key: Value pattern)
-            if (inHeaders && /^[^:]+:/.test(text)) {
-                lastNonEmptyLineWasHeader = true;
-                continue;
-            }
+				update(update: any) {
+					const newBodyRanges = getBodyRanges(
+						parsedFileRef.current,
+						parsedResponseRef.current,
+						mode
+					);
+					const rangesChanged =
+						JSON.stringify(newBodyRanges) !== JSON.stringify(this.bodyRanges);
 
-            // First non-empty, non-comment, non-header line after headers starts body
-            if (inHeaders) {
-                inBody = true;
-                inHeaders = false;
+					if (update.docChanged || update.viewportChanged || rangesChanged) {
+						this.bodyRanges = newBodyRanges;
+						this.decorations = this.buildDecorations(update.view);
+					}
+				}
 
-                const isError = !hadEmptyLineAfterHeaders;
+				buildDecorations(view: EditorView): DecorationSet {
+					const builder = new RangeSetBuilder<Decoration>();
+					const doc = view.state.doc;
 
-                if (isError) {
-                    builder.add(lineObj.from, lineObj.from, errorLineDecoration);
-                } else {
-                    builder.add(lineObj.from, lineObj.from, bodyLineDecoration);
-                }
-                continue;
-            }
+					for (let line = 1; line <= doc.lines; line++) {
+						if (isLineInBody(line, this.bodyRanges)) {
+							const lineObj = doc.line(line);
+							builder.add(lineObj.from, lineObj.from, bodyLineDecoration);
+						}
+					}
 
-            if (inBody) {
-                builder.add(lineObj.from, lineObj.from, bodyLineDecoration);
-            }
-        }
+					return builder.finish();
+				}
+			},
+			{
+				decorations: (v) => v.decorations
+			}
+		),
+		updateParsedFile: (newParsedFile: ParsedHttpFile | null) => {
+			parsedFileRef.current = newParsedFile;
+		},
+		getParsedFile: () => parsedFileRef.current,
+		updateParsedResponse: (newParsedResponse: ParsedHttpResponse | null) => {
+			parsedResponseRef.current = newParsedResponse;
+		},
+		getParsedResponse: () => parsedResponseRef.current
+	};
+}
 
-        return builder.finish();
-    }
-}, {
-    decorations: v => v.decorations
-});
+export const httpBodyLineBackground = createHttpBodyLineBackground().plugin;
 
 export {};
-

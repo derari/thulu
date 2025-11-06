@@ -1,13 +1,13 @@
 
 ### More Requests
 
-TRACE http://localhost/path
+POST http://localhost/path
 Authorization: Bearer token
+Content-Type: application/json
 
-###
+"foo": 1
 
-### Foo
 
-GET http://foo
+"asd"
 
 ###

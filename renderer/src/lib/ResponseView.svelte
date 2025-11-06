@@ -1,14 +1,19 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { EditorView, lineNumbers } from '@codemirror/view';
-    import { EditorState } from '@codemirror/state';
-    import { httpResponse } from './stores/httpResponse.js';
-    import { createHttpLanguage } from './editor/httpLanguage.js';
-    import { httpSyntaxHighlighting } from './editor/httpHighlighting.js';
-    import { httpEditorTheme } from './editor/httpEditorTheme.js';
-    import { httpBodyLineBackground } from './editor/httpBodyLineBackground.js';
-    import { httpStatusCodeHighlighting } from './editor/httpStatusCodeHighlighting.js';
-    import { responseFormatGutterExtension, setFormatStateEffect, setFormatToggleCallback } from './editor/responseFormatGutter.js';
+    import {onDestroy, onMount} from 'svelte';
+    import {EditorView, lineNumbers} from '@codemirror/view';
+    import {EditorState} from '@codemirror/state';
+    import {httpResponse} from './stores/httpResponse.js';
+    import {createHttpLanguage} from './editor/httpLanguage.js';
+    import {parseHttpResponse} from './editor/httpParser.js';
+    import {httpSyntaxHighlighting} from './editor/httpHighlighting.js';
+    import {httpEditorTheme} from './editor/httpEditorTheme.js';
+    import {createHttpBodyLineBackground} from './editor/httpBodyLineBackground.js';
+    import {httpStatusCodeHighlighting} from './editor/httpStatusCodeHighlighting.js';
+    import {
+        responseFormatGutterExtension,
+        setFormatStateEffect,
+        setFormatToggleCallback
+    } from './editor/responseFormatGutter.js';
 
     export let orientation: 'horizontal' | 'vertical' = 'vertical';
 
@@ -18,11 +23,14 @@
     var startSize = 0;
     var editorElement: HTMLDivElement;
     var editor: EditorView | null = null;
+    var httpLang: ReturnType<typeof createHttpLanguage> = createHttpLanguage({mode: 'response'});
+    var httpBodyBg = createHttpBodyLineBackground({mode: 'response'});
     var headerCount: number = 0;
     var emptyLineNumber: number = 0;
     var isFormatted: boolean = true;
     var rawBody: string = '';
     var contentType: string = '';
+    var previousResponseId: string | null = null;
 
     function calculateResponseStructure(response: typeof $httpResponse) {
         if (!response) {
@@ -109,11 +117,11 @@
                     }
                 }),
                 responseFormatGutterExtension,
-                createHttpLanguage('response'),
+                httpLang.language,
                 httpSyntaxHighlighting,
                 httpStatusCodeHighlighting,
                 httpEditorTheme,
-                httpBodyLineBackground,
+                httpBodyBg.plugin,
                 EditorView.lineWrapping,
                 EditorView.editable.of(false),
                 EditorState.readOnly.of(true)
@@ -137,15 +145,21 @@
 
         if (!response) {
             editor.dispatch({
-                changes: { from: 0, to: editor.state.doc.length, insert: '' },
+                changes: {from: 0, to: editor.state.doc.length, insert: ''},
                 effects: setFormatStateEffect.of({
                     bodyStartLine: 0,
                     isFormatted: false,
                     canFormat: false
                 })
             });
+            previousResponseId = null;
             return;
         }
+
+        // Create a unique ID for this response based on timestamp and status
+        const currentResponseId = `${response.timeMs}-${response.statusLine}`;
+        const isNewResponse = previousResponseId !== currentResponseId;
+        previousResponseId = currentResponseId;
 
         rawBody = response.body;
         contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
@@ -166,14 +180,30 @@
         const text = lines.join('\n');
         const bodyStartLine = emptyLineNumber + 1;
 
+        // Parse the response and update the language definition
+        const parsedResponse = parseHttpResponse(text);
+        httpLang.updateParsedResponse(parsedResponse);
+        httpBodyBg.updateParsedResponse(parsedResponse);
+
         editor.dispatch({
-            changes: { from: 0, to: editor.state.doc.length, insert: text },
+            changes: {from: 0, to: editor.state.doc.length, insert: text},
             effects: setFormatStateEffect.of({
                 bodyStartLine: bodyStartLine,
                 isFormatted: isFormatted,
                 canFormat: canFormat
             })
         });
+
+        // Scroll to top if this is a new response
+        if (isNewResponse) {
+            requestAnimationFrame(() => {
+                if (editor) {
+                    editor.dispatch({
+                        effects: EditorView.scrollIntoView(0, {y: "start"})
+                    });
+                }
+            });
+        }
     }
 
     function destroyEditor() {
@@ -182,9 +212,6 @@
             editor = null;
         }
     }
-
-    // ...existing code...
-
 
     function handleMouseDown(event: MouseEvent) {
         isResizing = true;
@@ -252,18 +279,19 @@
 </script>
 
 <button
-    class="resizer"
-    class:horizontal={orientation === 'horizontal'}
-    class:vertical={orientation === 'vertical'}
-    aria-label="Resize response panel"
-    on:mousedown={handleMouseDown}
+        aria-label="Resize response panel"
+        class="resizer"
+        class:horizontal={orientation === 'horizontal'}
+        class:vertical={orientation === 'vertical'}
+        on:mousedown={handleMouseDown}
 ></button>
-<div class="response-view" class:horizontal={orientation === 'horizontal'} class:vertical={orientation === 'vertical'} style={sizeStyle}>
+<div class="response-view" class:horizontal={orientation === 'horizontal'} class:vertical={orientation === 'vertical'}
+     style={sizeStyle}>
     <div class="response-header">
         <span class="response-title">{headerTitle}</span>
     </div>
     <div class="response-content">
-        <div class="editor-container" bind:this={editorElement}></div>
+        <div bind:this={editorElement} class="editor-container"></div>
         {#if !$httpResponse}
             <p class="no-response">No response yet</p>
         {/if}

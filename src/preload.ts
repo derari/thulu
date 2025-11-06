@@ -6,21 +6,52 @@
 // has access to a limited set of APIs.
 // Read more: https://www.electronjs.org/docs/latest/tutorial/tutorial-preload
 
-import { contextBridge, ipcRenderer } from 'electron';
+import {contextBridge, ipcRenderer} from 'electron';
+
+// Global callback storage - support multiple subscribers
+const preferencesOpenCallbacks: Array<() => void> = [];
+const preferencesLoadCallbacks: Array<(preferences: { appearance: string }) => void> = [];
+
+// Set up single listeners that call all registered callbacks
+ipcRenderer.on('preferences:open', () => {
+    preferencesOpenCallbacks.forEach(callback => callback());
+});
+
+ipcRenderer.on('preferences:load', (event, preferences: { appearance: string }) => {
+    preferencesLoadCallbacks.forEach(callback => callback(preferences));
+});
 
 // expose some IPC channels to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
-    requestProcessVersions: async () => {
-        return await ipcRenderer.invoke('renderer:requestProcessVersions');
+    listDirectory: async (dirPath: string) => {
+        return await ipcRenderer.invoke('fs:listDirectory', dirPath);
     },
-    loadCollectionItems: async (collectionPath: string) => {
-        return await ipcRenderer.invoke('collection:loadItems', collectionPath);
+    readFile: async (filePath: string) => {
+        return await ipcRenderer.invoke('fs:readFile', filePath);
     },
-    readHttpFile: async (filePath: string) => {
-        return await ipcRenderer.invoke('http:readFile', filePath);
+    writeFile: async (filePath: string, content: string) => {
+        return await ipcRenderer.invoke('fs:writeFile', filePath, content);
     },
-    writeHttpFile: async (filePath: string, content: string) => {
-        return await ipcRenderer.invoke('http:writeFile', filePath, content);
+    fileExists: async (filePath: string) => {
+        return await ipcRenderer.invoke('fs:fileExists', filePath);
+    },
+    deletePath: async (filePath: string) => {
+        return await ipcRenderer.invoke('fs:deletePath', filePath);
+    },
+    renamePath: async (oldPath: string, newPath: string) => {
+        return await ipcRenderer.invoke('fs:renamePath', oldPath, newPath);
+    },
+    createFolder: async (folderPath: string) => {
+        return await ipcRenderer.invoke('fs:createFolder', folderPath);
+    },
+    createFile: async (filePath: string, content: string) => {
+        return await ipcRenderer.invoke('fs:createFile', filePath, content);
+    },
+    updateCollectionName: async (collectionPath: string, newName: string) => {
+        return await ipcRenderer.invoke('collection:updateName', collectionPath, newName);
+    },
+    showInFileSystem: async (path: string) => {
+        return await ipcRenderer.invoke('system:showInFileSystem', path);
     },
     httpRequest: async (options: {
         url: string;
@@ -30,15 +61,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }) => {
         return await ipcRenderer.invoke('http:request', options);
     },
+    executeScript: async (params: {
+        code: string;
+        timeout: number;
+        collectionPath?: string;
+        responseBody?: string;
+        responseContentType?: string;
+    }) => {
+        return await ipcRenderer.invoke('script:execute', params);
+    },
     onPreferencesOpen: (callback: () => void) => {
-        ipcRenderer.on('preferences:open', () => {
-            callback();
-        });
+        preferencesOpenCallbacks.push(callback);
+        return () => {
+            const index = preferencesOpenCallbacks.indexOf(callback);
+            if (index > -1) {
+                preferencesOpenCallbacks.splice(index, 1);
+            }
+        };
     },
     onPreferencesLoad: (callback: (preferences: { appearance: string }) => void) => {
-        ipcRenderer.on('preferences:load', (event, preferences) => {
-            callback(preferences);
-        });
+        preferencesLoadCallbacks.push(callback);
+        return () => {
+            const index = preferencesLoadCallbacks.indexOf(callback);
+            if (index > -1) {
+                preferencesLoadCallbacks.splice(index, 1);
+            }
+        };
     },
     requestPreferences: () => {
         ipcRenderer.send('preferences:request');
@@ -50,5 +98,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // we can also expose variables, not just functions
 contextBridge.exposeInMainWorld('versions', {
-  chrome: () => process.versions.chrome,
+    chrome: () => process.versions.chrome,
 })

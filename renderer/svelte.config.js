@@ -12,8 +12,8 @@ const config = {
 			assets: 'build',
 			precompress: false,
 			strict: true
-		}),
-	},
+		})
+	}
 };
 
 export default config;

@@ -1,26 +1,106 @@
 {
-	"appId": "com.APPID.com",
-	"productName": "My Cool App",
-	"copyright": "Copyright © 2023 Cool Dude",
-	"mac": {
-		"category": "public.app-category.productivity",
-		"darkModeSupport": false,
-		"type": "distribution"
-	},
-	"linux": {
-		"target": ["deb", "tar.gz"],
-		"category": "Utility"
-	},
-	"directories": {
-		"output": "production"
-	},
-	"files": [
-    "package.json",
-		"./dist/main.js",
-		"./dist/preload.js",
-		{
-			"from": "./renderer/build",
-			"to": ""
-		}
-	]
+  "appId": "org.cthul.thulu",
+  "productName": "Thulu",
+  "copyright": "Copyright © 2025 Arian Treffer",
+  "directories": {
+    "buildResources": "production",
+    "output": "dist-packages"
+  },
+  "files": [
+    {
+      "filter": [
+        "package.json",
+        "dist/main.js",
+        "dist/preload.js",
+        "dist/fileOperations.js",
+        "dist/scriptExecutor.js"
+      ]
+    },
+    {
+      "from": "renderer/build",
+      "to": ""
+    }
+  ],
+  "extraMetadata": {
+    "main": "dist/main.js"
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["arm64", "x64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["arm64", "x64"]
+      }
+    ],
+    "category": "public.app-category.developer-tools",
+    "icon": "production/icon.icns"
+  },
+  "dmg": {
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "icon": "production/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Thulu"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-portable.${ext}"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "rpm",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "tar.gz",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "category": "Development",
+    "icon": "production/icon.png"
+  },
+  "publish": null
 }
+

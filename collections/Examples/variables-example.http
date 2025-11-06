@@ -1,0 +1,25 @@
+@baseUrl = https://jsonplaceholder.typicode.com
+@userId = 1
+@token = my-auth-token
+
+### Get User
+@userEndpoint = /users
+GET {{baseUrl}}{{userEndpoint}}/{{userId}}
+Authorization: Bearer {{token}}
+
+### Get User's Todos
+GET {{baseUrl}}/users/{{userId}}/todos
+
+### Create Todo
+@todoTitle = New Todo from Variables
+POST {{baseUrl}}/todos
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "title": "{{todoTitle}}",
+  "completed": false
+}
+
+> {% console.log("Todo created with title: {{todoTitle}}"); %}
+

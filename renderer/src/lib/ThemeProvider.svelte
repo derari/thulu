@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { themeMode, currentTheme } from './stores/theme.js';
+    import {onMount} from 'svelte';
+    import {currentTheme, themeMode} from './stores/theme.js';
 
     onMount(() => {
         window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
@@ -39,5 +39,5 @@
     $: applyCSSVariables($currentTheme);
 </script>
 
-<slot />
+<slot/>
 
