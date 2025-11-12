@@ -20,9 +20,10 @@ export interface HttpSection {
 	endLineNumber: number;
 	preamble?: Preamble;
 	verb?: string;
-	verbLine?: number;
+	requestStartLineNumber?: number;
+	requestEndLineNumber?: number;
 	url?: string;
-	isDivider?: boolean;
+	isDivider: boolean;
 	headers?: HttpHeaderSection;
 	body?: HttpBodySection;
 	postScripts: PostScript[];

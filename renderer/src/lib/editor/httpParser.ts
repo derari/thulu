@@ -41,6 +41,20 @@ function parseVariables(lines: string[], startLine: number, endLine: number): Re
 				if (name) {
 					variables[name] = value;
 				}
+			} else {
+				const whitespaceMatch = afterAt.match(/^(\S+)\s+(.*)$/);
+				if (whitespaceMatch) {
+					const name = whitespaceMatch[1];
+					const value = whitespaceMatch[2].trim();
+					if (name) {
+						variables[name] = value;
+					}
+				} else {
+					const name = afterAt.trim();
+					if (name) {
+						variables[name] = '';
+					}
+				}
 			}
 		}
 	}
@@ -52,7 +66,7 @@ function extractVerbAndUrl(
 	lines: string[],
 	startIndex: number,
 	nextSectionIndex?: number
-): { verb?: string; url?: string; verbLine?: number } {
+): { verb?: string; url?: string; requestStartLineNumber?: number; requestEndLineNumber?: number } {
 	const endIndex = nextSectionIndex !== undefined ? nextSectionIndex : lines.length;
 
 	for (let i = startIndex + 1; i < endIndex; i++) {
@@ -64,8 +78,34 @@ function extractVerbAndUrl(
 
 		for (const verb of HTTP_VERBS) {
 			if (line.startsWith(verb + ' ')) {
-				const url = line.substring(verb.length + 1).trim();
-				return { verb, url, verbLine: i + 1 };
+				const firstLinePart = line.substring(verb.length + 1).trim();
+				const urlParts = [firstLinePart];
+				const requestStartLineNumber = i + 1;
+				let requestEndLineNumber = requestStartLineNumber + 1;
+
+				for (let j = i + 1; j < endIndex; j++) {
+					const nextLine = lines[j];
+					const trimmedNextLine = nextLine.trim();
+
+					if (trimmedNextLine === '') {
+						break;
+					}
+
+					const isComment = trimmedNextLine.startsWith('#') || trimmedNextLine.startsWith('//');
+					const isIndented = nextLine[0] === ' ' || nextLine[0] === '\t';
+
+					if (isIndented || isComment) {
+						requestEndLineNumber = j + 2;
+						if (!isComment) {
+							urlParts.push(trimmedNextLine);
+						}
+					} else {
+						break;
+					}
+				}
+
+				const url = urlParts.join('');
+				return { verb, url, requestStartLineNumber, requestEndLineNumber };
 			}
 		}
 
@@ -104,19 +144,19 @@ function parseHeadersAndBody(
 				continue;
 			}
 
+			if (headerStartLine === undefined) {
+				headerStartLine = currentLineIndex + 1;
+			}
+			headerEndLine = currentLineIndex + 2;
+
 			if (trimmedLine.startsWith('#') || trimmedLine.startsWith('//')) {
 				continue;
 			}
 
 			const colonIndex = trimmedLine.indexOf(':');
 			if (colonIndex > 0) {
-				if (headerStartLine === undefined) {
-					headerStartLine = currentLineIndex + 1;
-				}
-
 				const key = trimmedLine.substring(0, colonIndex).trim();
 				headerMap[key] = trimmedLine.substring(colonIndex + 1).trim();
-				headerEndLine = currentLineIndex + 2;
 				continue;
 			}
 
@@ -254,7 +294,7 @@ export function parseHttpFile(content: string): ParsedHttpFile {
 		const endIndex = nextSectionIndex !== undefined ? nextSectionIndex : lines.length;
 
 		const name = extractSectionName(line);
-		const { verb, url, verbLine } = extractVerbAndUrl(lines, i, nextSectionIndex);
+		const { verb, url, requestStartLineNumber, requestEndLineNumber } = extractVerbAndUrl(lines, i, nextSectionIndex);
 
 		const isDivider = !verb && !url;
 
@@ -271,9 +311,9 @@ export function parseHttpFile(content: string): ParsedHttpFile {
 
 		// Calculate section preamble (between section marker and request line)
 		let sectionPreamble: Preamble | undefined;
-		if (verbLine) {
+		if (requestStartLineNumber) {
 			const preambleStart = i + 2; // Line after section marker (1-indexed)
-			const preambleEnd = verbLine; // Request line (1-indexed)
+			const preambleEnd = requestStartLineNumber; // Request line (1-indexed)
 			if (preambleStart < preambleEnd) {
 				const sectionVariables = parseVariables(lines, preambleStart, preambleEnd);
 				sectionPreamble = {
@@ -284,12 +324,12 @@ export function parseHttpFile(content: string): ParsedHttpFile {
 			}
 		}
 
-		// Parse headers and body if we have a verb line
+		// Parse headers and body if we have a request line
 		let headers: HttpHeaderSection | undefined;
 		let body: HttpBodySection | undefined;
 		let postScripts: PostScript[] = [];
-		if (verbLine) {
-			const parsed = parseHeadersAndBody(lines, verbLine - 1, endIndex);
+		if (requestStartLineNumber && requestEndLineNumber) {
+			const parsed = parseHeadersAndBody(lines, requestEndLineNumber - 2, endIndex);
 			headers = parsed.headers;
 			body = parsed.body;
 			postScripts = parsed.postScripts;
@@ -301,7 +341,8 @@ export function parseHttpFile(content: string): ParsedHttpFile {
 			endLineNumber: endIndex + 1,
 			preamble: sectionPreamble,
 			verb,
-			verbLine,
+			requestStartLineNumber,
+			requestEndLineNumber,
 			url,
 			isDivider,
 			headers,

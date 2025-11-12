@@ -94,9 +94,24 @@ async function executePostScripts(
 }
 
 function substituteVariables(text: string, variables: Record<string, string>): string {
-	return text.replace(/\{\{\s*([^}]+)\s*}}/g, (match, varName) => {
-		const trimmedName = varName.trim();
-		return variables[trimmedName] !== undefined ? variables[trimmedName] : match;
+	const visited = new Set<string>();
+	return substituteVariablesRecursive(text, variables, visited);
+}
+
+function substituteVariablesRecursive(text: string, variables: Record<string, string>, visited: Set<string>): string {
+	const variablePattern = /\{\{\s*([^}]+)\s*}}/g;
+	return text.replace(variablePattern, (match, varName) => {
+		const key = varName.trim();
+		if (visited.has(key)) {
+			throw new Error('Variable substitution loop detected for: ' + key);
+		}
+		if (variables[key] === undefined) {
+			return match;
+		}
+		visited.add(key);
+		const value = substituteVariablesRecursive(variables[key], variables, visited);
+		visited.delete(key);
+		return value;
 	});
 }
 
@@ -149,7 +164,6 @@ function mergeVariablesFromFile(
 ): Record<string, string> {
 	const merged = { ...baseVariables };
 
-	// ...existing code...
 	for (const section of parsedFile.sections) {
 		if (section === currentSection) {
 			continue;

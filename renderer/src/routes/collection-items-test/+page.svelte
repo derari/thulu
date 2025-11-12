@@ -15,7 +15,8 @@ const mockSection = {
   endLineNumber: 2,
   verb: 'GET',
   url: 'url',
-  isDivider: false
+  isDivider: false,
+  postScripts: []
 };
 
 const mockFile: CollectionItem = {

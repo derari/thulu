@@ -90,7 +90,7 @@ GET https://api.example.com/users`;
 			expect(result.sections[0].name).toBe('Get Users');
 			expect(result.sections[0].verb).toBe('GET');
 			expect(result.sections[0].url).toBe('https://api.example.com/users');
-			expect(result.sections[0].verbLine).toBe(2);
+			expect(result.sections[0].requestStartLineNumber).toBe(2);
 		});
 
 		it('should use URL as title when section has no name', () => {
@@ -133,6 +133,176 @@ DELETE https://api.example.com/users/123`;
 			verbs.forEach((verb, idx) => {
 				expect(result.sections[idx].verb).toBe(verb);
 			});
+		});
+	});
+
+	describe('multi-line request parsing', () => {
+		it('should parse request with indented continuation lines', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+  ?page=1
+  &limit=10`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections).toHaveLength(1);
+			expect(result.sections[0].verb).toBe('GET');
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10');
+			expect(result.sections[0].requestStartLineNumber).toBe(2);
+			expect(result.sections[0].requestEndLineNumber).toBe(5);
+			expect(result.sections[0].headers).toBeUndefined();
+		});
+
+		it('should parse request with tab-indented continuation lines', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+\t?page=1
+\t&limit=10`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10');
+			expect(result.sections[0].requestEndLineNumber).toBe(5);
+			expect(result.sections[0].headers).toBeUndefined();
+		});
+
+		it('should stop at first non-indented line after request', () => {
+			const content = `### Create User
+POST https://api.example.com/users
+  ?notify=true
+Content-Type: application/json`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?notify=true');
+			expect(result.sections[0].requestEndLineNumber).toBe(4);
+			expect(result.sections[0].headers).toBeDefined();
+			expect(result.sections[0].headers?.headers['Content-Type']).toBe('application/json');
+			expect(result.sections[0].headers?.startLineNumber).toBe(4);
+		});
+
+		it('should stop at empty line after request and treat following content as body', () => {
+			const content = `### Create User
+POST https://api.example.com/users
+  ?notify=true
+
+{"name": "John"}`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?notify=true');
+			expect(result.sections[0].requestEndLineNumber).toBe(4);
+			expect(result.sections[0].headers).toBeUndefined();
+			expect(result.sections[0].body).toBeDefined();
+			expect(result.sections[0].body?.startLineNumber).toBe(5);
+		});
+
+		it('should handle single-line request without continuation', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+Content-Type: application/json`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users');
+			expect(result.sections[0].requestStartLineNumber).toBe(2);
+			expect(result.sections[0].requestEndLineNumber).toBe(3);
+			expect(result.sections[0].headers).toBeDefined();
+			expect(result.sections[0].headers?.headers['Content-Type']).toBe('application/json');
+		});
+
+		it('should handle request with only indented lines until next section', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+  ?page=1
+  &limit=10
+### Create User
+POST https://api.example.com/users`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections).toHaveLength(2);
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10');
+			expect(result.sections[0].requestEndLineNumber).toBe(5);
+			expect(result.sections[0].headers).toBeUndefined();
+		});
+
+		it('should handle mixed indentation levels', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+  ?page=1
+    &limit=10
+  &sort=name`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10&sort=name');
+			expect(result.sections[0].requestEndLineNumber).toBe(6);
+			expect(result.sections[0].headers).toBeUndefined();
+		});
+
+		it('should parse headers after multi-line request', () => {
+			const content = `### Create User
+POST https://api.example.com/users
+  ?notify=true
+  &sendEmail=false
+Content-Type: application/json
+Authorization: Bearer token123
+
+{"name": "John"}`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?notify=true&sendEmail=false');
+			expect(result.sections[0].requestEndLineNumber).toBe(5);
+			expect(result.sections[0].headers).toBeDefined();
+			expect(result.sections[0].headers?.headers['Content-Type']).toBe('application/json');
+			expect(result.sections[0].headers?.headers['Authorization']).toBe('Bearer token123');
+			expect(result.sections[0].headers?.startLineNumber).toBe(5);
+			expect(result.sections[0].body).toBeDefined();
+		});
+
+		it('should skip indented comments in multi-line request', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+  # This is a comment
+  ?page=1
+  // Another comment
+  &limit=10`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10');
+			expect(result.sections[0].requestEndLineNumber).toBe(7);
+		});
+
+		it('should include non-indented comments in multi-line request', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+  ?page=1
+# This comment is not indented but still part of request
+  &limit=10`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10');
+			expect(result.sections[0].requestEndLineNumber).toBe(6);
+		});
+
+		it('should include mixed indented and non-indented comments in request', () => {
+			const content = `### Get Users
+GET https://api.example.com/users
+  ?page=1
+  # Indented comment
+# Non-indented comment
+  &limit=10
+  // Another indented comment
+  &sort=name`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].url).toBe('https://api.example.com/users?page=1&limit=10&sort=name');
+			expect(result.sections[0].requestEndLineNumber).toBe(9);
 		});
 	});
 
@@ -185,7 +355,7 @@ Authorization: Bearer token123`;
 		it('should handle headers with extra whitespace', () => {
 			const content = `### Request
 POST https://api.example.com
-  Content-Type  :   application/json  `;
+Content-Type  :   application/json  `;
 
 			const result = parseHttpFile(content);
 
@@ -205,6 +375,59 @@ Authorization: Bearer token`;
 				'Content-Type': 'application/json',
 				'Authorization': 'Bearer token'
 			});
+		});
+
+		it('should include commented headers in header section boundaries', () => {
+			const content = `###
+POST https://api.example.com
+Accept: */*
+#  foo: bar
+
+{}`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].headers).toBeDefined();
+			expect(result.sections[0].headers?.startLineNumber).toBe(3);
+			expect(result.sections[0].headers?.endLineNumber).toBe(5);
+			expect(result.sections[0].headers?.headers).toEqual({
+				'Accept': '*/*'
+			});
+		});
+
+		it('should handle multiple comment lines and commented URL parts in headers', () => {
+			const content = `###
+POST https://api.example.com
+    # /foo
+# Accept: */*
+# foo: bar
+
+{}`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].requestEndLineNumber).toBe(6);
+			expect(result.sections[0].headers).toBeUndefined();
+			expect(result.sections[0].body).toBeDefined();
+			expect(result.sections[0].body?.startLineNumber).toBe(7);
+		});
+
+		it('should handle multiple comment lines and commented URL parts in headers with comment before body', () => {
+			const content = `###
+POST https://api.example.com
+    # /foo
+# Accept: */*
+# foo: bar
+
+# bar: baz 
+{}`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.sections[0].requestEndLineNumber).toBe(6);
+			expect(result.sections[0].headers).toBeUndefined();
+			expect(result.sections[0].body).toBeDefined();
+			expect(result.sections[0].body?.startLineNumber).toBe(8);
 		});
 	});
 
@@ -644,15 +867,77 @@ GET https://api.example.com`;
 			});
 		});
 
-		it('should ignore lines without equals sign', () => {
-			const content = `@invalidVariable
+		it('should handle variable without equals sign as empty string', () => {
+			const content = `@variableWithoutValue
 
 ### Request
 GET https://api.example.com`;
 
 			const result = parseHttpFile(content);
 
-			expect(result.preamble.variables).toBeUndefined();
+			expect(result.preamble.variables).toEqual({
+				variableWithoutValue: ''
+			});
+		});
+
+		it('should handle variable with whitespace separator instead of equals', () => {
+			const content = `@varName some value here
+
+### Request
+GET https://api.example.com`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.preamble.variables).toEqual({
+				varName: 'some value here'
+			});
+		});
+
+		it('should handle multiple variables without equals sign', () => {
+			const content = `@var1
+@var2 value2
+@var3
+
+### Request
+GET https://api.example.com`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.preamble.variables).toEqual({
+				var1: '',
+				var2: 'value2',
+				var3: ''
+			});
+		});
+
+		it('should handle mixed variables with and without equals sign', () => {
+			const content = `@varWithEquals = some value
+@varWithWhitespace another value
+@varWithoutValue
+
+### Request
+GET https://api.example.com`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.preamble.variables).toEqual({
+				varWithEquals: 'some value',
+				varWithWhitespace: 'another value',
+				varWithoutValue: ''
+			});
+		});
+
+		it('should trim whitespace-separated values', () => {
+			const content = `@varName    value with spaces   
+
+### Request
+GET https://api.example.com`;
+
+			const result = parseHttpFile(content);
+
+			expect(result.preamble.variables).toEqual({
+				varName: 'value with spaces'
+			});
 		});
 
 		it('should handle multiple variables', () => {

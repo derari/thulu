@@ -13,6 +13,7 @@
     import {httpResponse} from '../stores/httpResponse.js';
     import {currentCollection} from '../stores/currentCollection.js';
     import {globalVariables} from '../stores/globalVariables.js';
+    import {isDarkMode} from '../stores/theme.js';
     import {
         type AvailableEnvironment,
         listAvailableEnvironments
@@ -198,13 +199,15 @@
         httpLang.updateParsedFile(parsed);
         httpBodyBg.updateParsedFile(parsed);
 
+        const currentThemeMode = $isDarkMode ? 'dark' : 'light';
+
         const langCompartment = new Compartment;
 
         const startState = EditorState.create({
             doc: content,
             extensions: [
                 lineNumbers(),
-                ...createHttpActionGutterExtension(executeRequest, parsed.sections),
+                ...createHttpActionGutterExtension(executeRequest, parsed.sections, currentThemeMode),
                 keymap.of(defaultKeymap),
                 langCompartment.of(httpLang.language),
                 httpSyntaxHighlighting,

@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest';
 import { formatVerb, getVerbColor, flattenCollection, flattenItems } from './CollectionItemsUtils';
 
-const mockSection = {name: 'Test', startLineNumber: 1, endLineNumber: 2, verb: 'GET', url: 'url', isDivider: false};
+const mockSection = {name: 'Test', startLineNumber: 1, endLineNumber: 2, verb: 'GET', url: 'url', isDivider: false, postScripts: []};
 const mockEnv = {folderPath: '/env', hasPublicEnv: true, hasPrivateEnv: false};
 const mockItem = {
     title: 'File',

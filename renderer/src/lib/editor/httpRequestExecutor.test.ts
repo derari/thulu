@@ -1,4 +1,482 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { executeHttpRequest } from './httpRequestExecutor';
+
+describe('Variable Substitution', () => {
+	beforeEach(() => {
+		vi.stubGlobal('window', {
+			electronAPI: {
+				httpRequest: vi.fn().mockResolvedValue({
+					status: 200,
+					statusText: 'OK',
+					headers: {},
+					body: ''
+				}),
+				executeScript: vi.fn()
+			}
+		});
+	});
+
+	it('should substitute simple variables', async () => {
+		const variables = {
+			host: 'example.com',
+			port: '8080'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{host}}:{{port}}/api',
+					isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				url: 'example.com:8080/api'
+			})
+		);
+	});
+
+	it('should recursively substitute nested variables', async () => {
+		const variables = {
+			base: 'example.com',
+			host: '{{base}}',
+			url: 'https://{{host}}/api'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{url}}',
+					isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				url: 'https://example.com/api'
+			})
+		);
+	});
+
+	it('should recursively substitute multiple levels deep', async () => {
+		const variables = {
+			level1: 'base',
+			level2: '{{level1}}.example',
+			level3: '{{level2}}.com',
+			fullUrl: 'https://{{level3}}/api'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{fullUrl}}',
+					isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				url: 'https://base.example.com/api'
+			})
+		);
+	});
+
+	it('should detect direct self-referencing loop', async () => {
+		const variables = {
+			loop: '{{loop}}'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{loop}}',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await expect(executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		})).rejects.toThrow('Variable substitution loop detected for: loop');
+	});
+
+	it('should detect circular loop between two variables', async () => {
+		const variables = {
+			varA: '{{varB}}',
+			varB: '{{varA}}'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{varA}}',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await expect(executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		})).rejects.toThrow('Variable substitution loop detected');
+	});
+
+	it('should detect circular loop between three variables', async () => {
+		const variables = {
+			varA: '{{varB}}',
+			varB: '{{varC}}',
+			varC: '{{varA}}'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{varA}}',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await expect(executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		})).rejects.toThrow('Variable substitution loop detected');
+	});
+
+	it('should handle undefined variables gracefully', async () => {
+		const variables = {
+			host: 'example.com'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'GET',
+					url: '{{host}}/{{undefined}}/api',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				url: 'example.com/{{undefined}}/api'
+			})
+		);
+	});
+
+	it('should recursively substitute variables in headers', async () => {
+		const variables = {
+			tokenBase: 'secret',
+			token: 'Bearer {{tokenBase}}123',
+			contentType: 'application/json'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 3,
+					verb: 'POST',
+					url: 'https://example.com/api',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {
+							'Authorization': '{{token}}',
+							'Content-Type': '{{contentType}}'
+						}
+					},
+					postScripts: []
+				}
+			],
+			lines: []
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				headers: {
+					'Authorization': 'Bearer secret123',
+					'Content-Type': 'application/json'
+				}
+			})
+		);
+	});
+
+	it('should recursively substitute variables in body', async () => {
+		const variables = {
+			userId: '12345',
+			name: 'John Doe'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 5,
+					verb: 'POST',
+					url: 'https://example.com/api',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					body: {
+						startLineNumber: 3,
+						endLineNumber: 5
+					},
+					postScripts: []
+				}
+			],
+			lines: ['POST https://example.com/api', '', '{"userId": "{{userId}}", "name": "{{name}}"}']
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				body: '{"userId": "12345", "name": "John Doe"}'
+			})
+		);
+	});
+
+	it('should recursively substitute nested variable values in body', async () => {
+		const variables = {
+			base: '12345',
+			userId: '{{base}}',
+			name: 'John Doe',
+			nameField: '{{name}}'
+		};
+
+		const parsedFile = {
+			preamble: {
+				startLineNumber: 1,
+				endLineNumber: 1,
+				variables: variables
+			},
+			sections: [
+				{
+					name: 'Test',
+					startLineNumber: 1,
+					endLineNumber: 5,
+					verb: 'POST',
+					url: 'https://example.com/api',
+                    isDivider: false,
+					headers: {
+						startLineNumber: 2,
+						endLineNumber: 2,
+						headers: {}
+					},
+					body: {
+						startLineNumber: 3,
+						endLineNumber: 5
+					},
+					postScripts: []
+				}
+			],
+			lines: ['POST https://example.com/api', '', '{"userId": "{{userId}}", "name": "{{nameField}}"}']
+		};
+
+		await executeHttpRequest({
+			parsedFile,
+			sectionLineNumber: 1,
+			selectedEnvironment: '',
+			fileDirectory: '',
+			collectionPath: ''
+		});
+
+		expect(window.electronAPI.httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				body: '{"userId": "12345", "name": "John Doe"}'
+			})
+		);
+	});
+});
 
 describe('Variable Precedence in Request Executor', () => {
 	it('should merge variables with correct precedence', () => {
