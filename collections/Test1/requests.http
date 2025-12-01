@@ -39,13 +39,14 @@ POST http://example.com?
     # /another-path:foo&
     # /baz
     # /path
-# Authorization: Bearer
+Authorization: Bearer
 # foo: 1
 Accept: */*
 # bar: 2
 # baz: 3
 
 # foo
+
 body
 # foo
 

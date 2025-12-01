@@ -41,6 +41,20 @@ A modern REST client built on HTTP files, providing a clean and efficient way to
 - **Response body display** with syntax highlighting
 - **Collection management** - switch between multiple collections
 
+## Keyboard Shortcuts
+
+### Editor Shortcuts
+
+| Shortcut                   | Action                                                    |
+|----------------------------|-----------------------------------------------------------|
+| **Ctrl+S**                 | Save the current file                                     |
+| **Ctrl+D, Ctrl+Shift+↓/↑** | Duplicate current line                                    |
+| **Ctrl+E**                 | Delete current line                                       |
+| **Alt+Shift+↑/↓**          | Move current line up                                      |
+| **Ctrl+Shift+C, Ctrl+/**   | Toggle line comment                                       |
+
+All shortcuts work on Windows, macOS (Ctrl translates to Cmd), and Linux.
+
 ## How It Works
 
 Thulu is built as an Electron application with a Svelte frontend:

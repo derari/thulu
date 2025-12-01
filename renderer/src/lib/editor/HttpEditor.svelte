@@ -9,6 +9,7 @@
     import {createHttpBodyLineBackground} from './httpBodyLineBackground.js';
     import {createHttpActionGutterExtension} from './httpActionGutter.js';
     import {parseHttpFile} from './httpParser.js';
+    import {toggleLineComment} from './commentUtils.js';
     import {openFile} from '../stores/openFile.js';
     import {httpResponse} from '../stores/httpResponse.js';
     import {currentCollection} from '../stores/currentCollection.js';
@@ -28,6 +29,7 @@
     let availableEnvironments: AvailableEnvironment[] = [];
     let selectedEnvironment: string = '';
     let relativeFilename: string = '';
+    let isDirty: boolean = false;
     const httpLang = createHttpLanguage({mode: 'request'});
     const httpBodyBg = createHttpBodyLineBackground({mode: 'request'});
 
@@ -38,6 +40,8 @@
     }
 
     $: saveSelectedEnvironment(selectedEnvironment);
+
+    $: isDirty = $openFile && content !== $openFile.content || false;
 
     $: if ($openFile) {
         loadEnvironments();
@@ -71,6 +75,13 @@
         return localStorage.getItem(SELECTED_ENV_KEY) || '';
     }
 
+    function handleSaveFile() {
+        openFile.save();
+    }
+
+    function getIsMacPlatform(): boolean {
+        return typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+    }
 
     function getRelativeFilename(file: any): string {
         const collection = $currentCollection;
@@ -203,12 +214,172 @@
 
         const langCompartment = new Compartment;
 
+        const duplicateLineAndMoveDown = (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const line = state.doc.lineAt(from);
+
+            view.dispatch({
+                changes: { from: line.to, insert: '\n' + line.text },
+                selection: { anchor: line.to + 1 }
+            });
+
+            return true;
+        };
+
+        const duplicateLineAndMoveUp = (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const line = state.doc.lineAt(from);
+
+            view.dispatch({
+                changes: { from: line.from, insert: line.text + '\n' },
+                selection: { anchor: line.from }
+            });
+
+            return true;
+        };
+
+        const deleteCurrentLine = (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const line = state.doc.lineAt(from);
+
+            const deleteFrom = line.from;
+            const deleteTo = Math.min(line.to + 1, state.doc.length);
+
+            view.dispatch({
+                changes: { from: deleteFrom, to: deleteTo, insert: '' }
+            });
+
+            return true;
+        };
+
+        const moveLineDown = (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const line = state.doc.lineAt(from);
+            const nextLine = line.to + 1 < state.doc.length ? state.doc.lineAt(line.to + 1) : null;
+
+            if (!nextLine) {
+                return true;
+            }
+
+            const lineText = state.doc.sliceString(line.from, line.to);
+            const nextLineText = state.doc.sliceString(nextLine.from, nextLine.to);
+
+            view.dispatch({
+                changes: [
+                    { from: line.from, to: line.to, insert: nextLineText },
+                    { from: nextLine.from, to: nextLine.to, insert: lineText }
+                ],
+                selection: { anchor: nextLine.from }
+            });
+
+            return true;
+        };
+
+        const moveLineUp = (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const line = state.doc.lineAt(from);
+
+            if (line.from === 0) {
+                return true;
+            }
+
+            const prevLine = state.doc.lineAt(line.from - 1);
+            const lineText = state.doc.sliceString(line.from, line.to);
+            const prevLineText = state.doc.sliceString(prevLine.from, prevLine.to);
+
+            view.dispatch({
+                changes: [
+                    { from: prevLine.from, to: prevLine.to, insert: lineText },
+                    { from: line.from, to: line.to, insert: prevLineText }
+                ],
+                selection: { anchor: prevLine.from }
+            });
+
+            return true;
+        };
+
+        const toggleLineCommentCurrentLine = (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const line = state.doc.lineAt(from);
+            toggleLineComment(view, line.number);
+            return true;
+        };
+
+        const submitRequest = async (view: EditorView) => {
+            const { state } = view;
+            const { from } = state.selection.main;
+            const cursorLine = state.doc.lineAt(from).number;
+
+            var sectionForExecution = 1;
+            for (const section of parsed.sections) {
+                if (section.startLineNumber <= cursorLine) {
+                    sectionForExecution = section.startLineNumber;
+                }
+            }
+
+            await executeRequest(sectionForExecution);
+            return true;
+        };
+
+        const saveShortcut = {
+            key: 'Ctrl-s',
+            run: (view: EditorView) => {
+                handleSaveFile();
+                return true;
+            }
+        };
+
+        const duplicateLineShortcuts = [
+            {
+                key: 'Ctrl-d',
+                run: duplicateLineAndMoveDown
+            },
+            {
+                key: 'Ctrl-Shift-ArrowDown',
+                run: duplicateLineAndMoveDown
+            },
+            {
+                key: 'Ctrl-Shift-ArrowUp',
+                run: duplicateLineAndMoveUp
+            },
+            {
+                key: 'Ctrl-e',
+                run: deleteCurrentLine
+            },
+            {
+                key: 'Alt-Shift-ArrowUp',
+                run: moveLineUp
+            },
+            {
+                key: 'Alt-Shift-ArrowDown',
+                run: moveLineDown
+            },
+            {
+                key: 'Ctrl-/',
+                run: toggleLineCommentCurrentLine
+            },
+            {
+                key: 'Ctrl-Shift-c',
+                run: toggleLineCommentCurrentLine
+            },
+            {
+                key: 'Ctrl-Enter',
+                run: submitRequest
+            }
+        ];
+
         const startState = EditorState.create({
             doc: content,
             extensions: [
                 lineNumbers(),
                 ...createHttpActionGutterExtension(executeRequest, parsed.sections, currentThemeMode),
-                keymap.of(defaultKeymap),
+                keymap.of([saveShortcut, ...duplicateLineShortcuts, ...defaultKeymap]),
                 langCompartment.of(httpLang.language),
                 httpSyntaxHighlighting,
                 httpEditorTheme,
@@ -271,7 +442,7 @@
 
 <div class="http-editor">
     <div class="editor-header">
-        <span class="editor-title">{relativeFilename}</span>
+        <span class="editor-title">{relativeFilename}{isDirty ? '*' : ''}</span>
         {#if availableEnvironments.length > 0}
             <select class="env-selector" bind:value={selectedEnvironment}>
                 <option value="">No env selected</option>

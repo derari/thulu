@@ -44,6 +44,7 @@
 		"@fontsource/monaspace-neon": "^5.2.5",
 		"@lezer/highlight": "^1.2.3",
 		"codemirror": "^6.0.2",
+		"commonmark": "^0.31.2",
 		"lucide-svelte": "^0.552.0",
 		"svelte-preprocess": "^6.0.3"
 	}

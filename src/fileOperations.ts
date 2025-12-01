@@ -35,6 +35,14 @@ export function readFile(filePath: string): string | null {
     return fs.readFileSync(filePath, 'utf-8');
 }
 
+export function readFileBinary(filePath: string): string | null {
+    if (!fs.existsSync(filePath)) {
+        return null;
+    }
+    const buffer = fs.readFileSync(filePath);
+    return buffer.toString('base64');
+}
+
 export function writeFile(filePath: string, content: string): { success: boolean; error?: string } {
     try {
         fs.writeFileSync(filePath, content, 'utf-8');

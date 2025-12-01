@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readFile: async (filePath: string) => {
         return await ipcRenderer.invoke('fs:readFile', filePath);
     },
+    readFileBinary: async (filePath: string) => {
+        return await ipcRenderer.invoke('fs:readFileBinary', filePath);
+    },
     writeFile: async (filePath: string, content: string) => {
         return await ipcRenderer.invoke('fs:writeFile', filePath, content);
     },
@@ -52,6 +55,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     showInFileSystem: async (path: string) => {
         return await ipcRenderer.invoke('system:showInFileSystem', path);
+    },
+    openExternal: async (url: string) => {
+        return await ipcRenderer.invoke('system:openExternal', url);
     },
     httpRequest: async (options: {
         url: string;

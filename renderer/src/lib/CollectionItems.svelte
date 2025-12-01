@@ -4,10 +4,11 @@
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
     import type {CollectionItem, EnvironmentConfig, HttpSection} from './collection';
-    import {ChevronRight, Settings, MoreVertical, AlertTriangle} from 'lucide-svelte';
+    import {ChevronRight, Settings, MoreVertical, AlertTriangle, Info} from 'lucide-svelte';
     import {flattenCollection, flattenItems, formatVerb, getVerbColor} from './CollectionItemsUtils';
     import RenameModal from './RenameModal.svelte';
     import NewItemModal from './NewItemModal.svelte';
+    import ReadmeView from './ReadmeView.svelte';
 
     function basename(filePath: string): string {
         const normalized = filePath.replace(/\\/g, '/');
@@ -30,20 +31,6 @@
     const INDENT_WIDTH = 15;
     const DELETE_CONFIRMATION_TIMEOUT = 10000;
 
-    interface DisplayItem {
-        item: CollectionItem;
-        indent: number;
-        isSection: boolean;
-        section?: HttpSection;
-        isFolder: boolean;
-        isFile: boolean;
-        hasChildren: boolean;
-        folderPath?: string;
-        fileKey?: string;
-        isEnvironment: boolean;
-        environmentConfig?: EnvironmentConfig;
-    }
-
     let collapsed: Set<string> = new Set();
     let openMenuKey: string | null = null;
     let confirmDeleteKey: string | null = null;
@@ -56,6 +43,9 @@
     let showNewItemModal = false;
     let newItemType: 'file' | 'folder' | 'request' = 'file';
     let newItemParent: CollectionItem | null = null;
+    let showReadmeView = false;
+    let readmeFolderPath: string | null = null;
+    let readmeName: string = 'README';
 
     $: flatItems = (() => {
         if (!$currentCollection) return [];
@@ -323,6 +313,19 @@
         showNewItemModal = true;
     }
 
+    function handleInfoClick(event: MouseEvent, folderPath: string, itemName: string) {
+        event.stopPropagation();
+        readmeFolderPath = folderPath;
+        readmeName = itemName;
+        showReadmeView = true;
+    }
+
+    function handleCloseReadme() {
+        showReadmeView = false;
+        readmeFolderPath = null;
+        readmeName = 'README';
+    }
+
     function handleNewFileClick(event: MouseEvent, item: CollectionItem) {
         event.stopPropagation();
         openMenuKey = null;
@@ -569,6 +572,16 @@ GET https://example.com
                                             <AlertTriangle size={16}/>
                                         </button>
                                     {:else}
+                                        {#if item.hasReadme}
+                                            <button
+                                                    class="action-button info-button"
+                                                    on:click={(e) => handleInfoClick(e, item.folderPath || '', item.title)}
+                                                    title="Contains README"
+                                                    aria-label="Contains README"
+                                            >
+                                                <Info size={16}/>
+                                            </button>
+                                        {/if}
                                         <button
                                                 class="action-button menu-button"
                                                 on:click={(e) => toggleMenu(e, itemKey)}
@@ -666,9 +679,17 @@ GET https://example.com
     />
 {/if}
 
+{#if showReadmeView && readmeFolderPath}
+    <ReadmeView
+        folderPath={readmeFolderPath}
+        name={readmeName}
+        onClose={handleCloseReadme}
+    />
+{/if}
+
 <style>
     .collection-items {
-        padding: 1rem;
+        padding: 1rem 0 1rem 1rem;
         background: var(--sidebar-bg);
         color: var(--text-primary);
         flex: 1;
@@ -688,7 +709,7 @@ GET https://example.com
     }
 
     .item {
-        padding: 0.5rem;
+        padding: 0.5rem 0;
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -805,6 +826,14 @@ GET https://example.com
     .confirm-delete-button:hover {
         background: var(--interactive-danger);
         color: white;
+    }
+
+    .info-button {
+        color: var(--text-secondary);
+    }
+
+    .info-button:hover {
+        color: var(--text-primary);
     }
 
     @keyframes pulse {

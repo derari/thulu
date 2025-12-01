@@ -12,6 +12,7 @@ export interface CollectionItem {
 	items?: CollectionItem[];
 	sections?: HttpSection[];
 	environments?: EnvironmentConfig;
+	hasReadme: boolean;
 }
 
 export interface HttpSection {

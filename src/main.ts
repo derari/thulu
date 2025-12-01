@@ -2,7 +2,7 @@ import {app, BrowserWindow, dialog, ipcMain, shell, Menu} from 'electron';
 import * as path from "path";
 import * as fs from "fs";
 import serve from 'electron-serve';
-import {loadPreferences, savePreferences, readFile, writeFile, listDirectory, fileExists, deletePath, renamePath, createFolder, createFile, updateCollectionName} from './fileOperations.js';
+import {loadPreferences, savePreferences, readFile, readFileBinary, writeFile, listDirectory, fileExists, deletePath, renamePath, createFolder, createFile, updateCollectionName} from './fileOperations.js';
 import {executeScript, type ScriptExecutionParams} from './scriptExecutor.js';
 
 const serveURL = serve({directory: '.'});
@@ -152,6 +152,9 @@ app.once('ready', function handleIPCReady() {
     ipcMain.handle('fs:readFile', function handleReadFile(event, filePath: string) {
         return readFile(filePath);
     });
+    ipcMain.handle('fs:readFileBinary', function handleReadFileBinary(event, filePath: string) {
+        return readFileBinary(filePath);
+    });
     ipcMain.handle('fs:writeFile', function handleWriteFile(event, filePath: string, content: string) {
         return writeFile(filePath, content);
     });
@@ -179,6 +182,10 @@ app.once('ready', function handleIPCReady() {
     });
     ipcMain.handle('system:showInFileSystem', async function handleShowInFileSystem(event, path: string) {
         await shell.openPath(path);
+        return { success: true };
+    });
+    ipcMain.handle('system:openExternal', async function handleOpenExternal(event, url: string) {
+        await shell.openExternal(url);
         return { success: true };
     });
     ipcMain.on('preferences:save', function handlePreferencesSave(event, preferences: Preferences) {

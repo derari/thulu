@@ -6,7 +6,8 @@
     import CollectionItems from './CollectionItems.svelte';
     import NewItemModal from './NewItemModal.svelte';
     import RenameModal from './RenameModal.svelte';
-    import {MoreVertical} from 'lucide-svelte';
+    import {MoreVertical, Info} from 'lucide-svelte';
+    import ReadmeView from './ReadmeView.svelte';
 
     let width: number = 200;
     let isResizing = false;
@@ -16,6 +17,8 @@
     let showNewItemModal = false;
     let newItemType: 'file' | 'folder' = 'file';
     let showRenameModal = false;
+    let showReadmeView = false;
+    let readmeName: string = 'README';
 
     async function handleCollectionNameClick() {
         await openFile.save();
@@ -159,6 +162,18 @@ GET https://example.com
         }
     }
 
+    function handleInfoClick(event: MouseEvent) {
+        event.stopPropagation();
+        showHeaderMenu = false;
+        readmeName = $currentCollection?.name || 'README';
+        showReadmeView = true;
+    }
+
+    function handleCloseReadme() {
+        showReadmeView = false;
+        readmeName = 'README';
+    }
+
     onMount(() => {
         window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
             if (preferences.sidebarWidth && preferences.sidebarWidth >= 50) {
@@ -184,6 +199,16 @@ GET https://example.com
                 {$currentCollectionName}
             </div>
             <div class="header-actions">
+                {#if $currentCollection?.root.hasReadme}
+                    <button
+                            class="header-action-button info-button"
+                            on:click={handleInfoClick}
+                            title="Collection has README"
+                            aria-label="Collection has README"
+                    >
+                        <Info size={16}/>
+                    </button>
+                {/if}
                 <button
                         class="header-menu-button"
                         on:click={toggleHeaderMenu}
@@ -248,6 +273,14 @@ GET https://example.com
     />
 {/if}
 
+{#if showReadmeView && $currentCollection}
+    <ReadmeView
+        folderPath={$currentCollection.path}
+        name={readmeName}
+        onClose={handleCloseReadme}
+    />
+{/if}
+
 <style>
     .sidebar {
         height: 100%;
@@ -307,6 +340,27 @@ GET https://example.com
     .header-menu-button:hover {
         background: var(--bg-tertiary);
         color: var(--text-primary);
+    }
+
+    .header-action-button {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 3px;
+        transition: all 0.2s;
+    }
+
+    .header-action-button.info-button {
+        color: var(--text-secondary);
+    }
+
+    .header-action-button.info-button:hover {
+        color: var(--text-primary);
+        background: var(--bg-tertiary);
     }
 
     .header-dropdown-menu {
