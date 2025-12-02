@@ -1,6 +1,8 @@
 import {app, BrowserWindow, dialog, ipcMain, shell, Menu} from 'electron';
 import * as path from "path";
 import * as fs from "fs";
+import * as https from "https";
+import * as http from "http";
 import serve from 'electron-serve';
 import {loadPreferences, savePreferences, readFile, readFileBinary, writeFile, listDirectory, fileExists, deletePath, renamePath, createFolder, createFile, updateCollectionName} from './fileOperations.js';
 import {executeScript, type ScriptExecutionParams} from './scriptExecutor.js';
@@ -145,6 +147,74 @@ app.on("window-all-closed", function handleWindowAllClosed() {
     }
 });
 
+function makeHttpRequest(options: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    rejectUnauthorized?: boolean;
+}): Promise<{
+    ok: boolean;
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    body: string;
+}> {
+    return new Promise((resolve, reject) => {
+        const urlObj = new URL(options.url);
+        const isHttps = urlObj.protocol === 'https:';
+        const httpModule = isHttps ? https : http;
+
+        const requestOptions = {
+            hostname: urlObj.hostname,
+            port: urlObj.port,
+            path: urlObj.pathname + urlObj.search,
+            method: options.method,
+            headers: options.headers,
+            rejectUnauthorized: options.rejectUnauthorized ?? false
+        };
+
+        const req = httpModule.request(requestOptions, (res) => {
+            const chunks: Buffer[] = [];
+
+            res.on('data', (chunk: Buffer) => {
+                chunks.push(chunk);
+            });
+
+            res.on('end', () => {
+                const body = Buffer.concat(chunks).toString('utf-8');
+                const headers: Record<string, string> = {};
+
+                if (res.headers) {
+                    for (const [key, value] of Object.entries(res.headers)) {
+                        if (value !== undefined) {
+                            headers[key] = Array.isArray(value) ? value.join(', ') : value;
+                        }
+                    }
+                }
+
+                resolve({
+                    ok: res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300,
+                    status: res.statusCode || 0,
+                    statusText: res.statusMessage || '',
+                    headers,
+                    body
+                });
+            });
+        });
+
+        req.on('error', (error) => {
+            reject(error);
+        });
+
+        if (options.body) {
+            req.write(options.body);
+        }
+
+        req.end();
+    });
+}
+
 app.once('ready', function handleIPCReady() {
     ipcMain.handle('fs:listDirectory', function handleListDirectory(event, dirPath: string) {
         return listDirectory(dirPath);
@@ -200,27 +270,9 @@ app.once('ready', function handleIPCReady() {
         method: string;
         headers: Record<string, string>;
         body?: string;
+        rejectUnauthorized?: boolean;
     }) {
-        const response = await fetch(options.url, {
-            method: options.method,
-            headers: options.headers,
-            body: options.body
-        });
-
-        const headers: Record<string, string> = {};
-        response.headers.forEach((value, key) => {
-            headers[key] = value;
-        });
-
-        const body = await response.text();
-
-        return {
-            ok: response.ok,
-            status: response.status,
-            statusText: response.statusText,
-            headers,
-            body
-        };
+        return makeHttpRequest(options);
     });
     ipcMain.handle('script:execute', function handleScriptExecute(event, params: ScriptExecutionParams) {
         return executeScript(params);

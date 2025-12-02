@@ -199,6 +199,72 @@ function mergeVariablesFromFile(
 	return merged;
 }
 
+function encodeBasicAuthIfNeeded(headers: Record<string, string>): Record<string, string> {
+	const result = { ...headers };
+
+	for (const [key, value] of Object.entries(headers)) {
+		if (isAuthorizationHeader(key) && isBasicAuthWithCredentials(value)) {
+			result[key] = encodeBasicAuthValue(value);
+		}
+	}
+
+	return result;
+}
+
+function isAuthorizationHeader(headerName: string): boolean {
+	return headerName.toLowerCase() === 'authorization';
+}
+
+function isBasicAuthWithCredentials(headerValue: string): boolean {
+	const trimmed = headerValue.trim();
+	const lowerValue = trimmed.toLowerCase();
+
+	if (!lowerValue.startsWith('basic ')) {
+		return false;
+	}
+
+	const credentials = trimmed.substring(6).trim();
+	return credentials.includes(':');
+}
+
+function encodeBasicAuthValue(headerValue: string): string {
+	const trimmed = headerValue.trim();
+	const basicPrefix = trimmed.substring(0, 6);
+	const credentials = trimmed.substring(6).trim();
+
+	const encoded = btoa(credentials);
+	return `${basicPrefix}${encoded}`;
+}
+
+function getOptionValue(
+	parsedFile: ParsedHttpFile,
+	currentSection: HttpSection,
+	optionName: string
+): string | undefined {
+	const sectionOptions = currentSection.preamble?.options;
+	if (sectionOptions && sectionOptions[optionName] !== undefined) {
+		return sectionOptions[optionName];
+	}
+
+	const fileOptions = parsedFile.preamble.options;
+	if (fileOptions && fileOptions[optionName] !== undefined) {
+		return fileOptions[optionName];
+	}
+
+	return undefined;
+}
+
+function evaluateFlag(optionValue: string | undefined): boolean {
+	if (optionValue === undefined) {
+		return false;
+	}
+
+	const lowerValue = optionValue.toLowerCase();
+	const falseValues = ['0', 'no', 'off', 'false'];
+
+	return !falseValues.includes(lowerValue);
+}
+
 export async function executeHttpRequest(params: RequestExecutionParams): Promise<HttpRequestResponse> {
 	const { parsedFile, sectionLineNumber, selectedEnvironment, fileDirectory, collectionPath, globalVariables } = params;
 
@@ -227,12 +293,16 @@ export async function executeHttpRequest(params: RequestExecutionParams): Promis
 		substitutedHeaders[substitutedKey] = substituteVariables(value, variables);
 	}
 
+	const encodedHeaders = encodeBasicAuthIfNeeded(substitutedHeaders);
+
 	let body = bodyContent;
 	if (body) {
 		body = substituteVariables(body, variables);
 	}
 
-	console.log('Executing request:', { verb: section.verb, url, headers: substitutedHeaders, body });
+	console.log('Executing request:', { verb: section.verb, url, headers: encodedHeaders, body });
+
+	const noValidateCerts = evaluateFlag(getOptionValue(parsedFile, section, 'no-validate-certs'));
 
 	const startTime = performance.now();
 
@@ -240,8 +310,9 @@ export async function executeHttpRequest(params: RequestExecutionParams): Promis
 		const response = await window.electronAPI.httpRequest({
 			url: url,
 			method: section.verb,
-			headers: substitutedHeaders,
-			body: body || undefined
+			headers: encodedHeaders,
+			body: body || undefined,
+			rejectUnauthorized: !noValidateCerts
 		});
 
 		const endTime = performance.now();
@@ -269,6 +340,7 @@ export async function executeHttpRequest(params: RequestExecutionParams): Promis
 	} catch (error) {
 		const endTime = performance.now();
 		const timeMs = Math.round(endTime - startTime);
+        console.log('Request failed:', error);
 
 		return {
 			statusLine: 'Error',

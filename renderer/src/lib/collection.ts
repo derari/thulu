@@ -33,7 +33,8 @@ export interface HttpSection {
 export interface Preamble {
 	startLineNumber: number;
 	endLineNumber: number;
-	variables?: Record<string, string>;
+	variables: Record<string, string>;
+	options: Record<string, string>;
 }
 
 export interface PostScript {

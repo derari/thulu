@@ -783,7 +783,10 @@
                                             <div class="dropdown-container">
                                                 <button
                                                         type="button"
-                                                        title={variable.isOverridden ? "Overridden from parent - Click to see sources" : "Inherited from {variable.source} - Click to see sources"}
+                                                        title={(variable.isOverridden ? "Overridden" : "Inherited")
+                                                             + " from " + variable.source
+                                                             + (variable.isShared ? " (shared)" : "")
+                                                             + " - Click to see sources"}
                                                         class="clickable-icon"
                                                         on:click={(e) => { e.stopPropagation(); toggleInheritanceDropdown(variable.name); }}
                                                 >

@@ -44,6 +44,7 @@ export interface EnvironmentVariable {
 	isInherited: boolean;
 	isOverridden: boolean;
 	isEditable: boolean;
+	isShared: boolean;
 	parentValue?: string;
 	parentIsPrivate?: boolean;
 	parentSource?: string;
@@ -197,12 +198,100 @@ export async function listAvailableEnvironments(
 	return environments;
 }
 
+function processEnvironmentVariables(
+	envFile: EnvironmentFile,
+	environmentName: string,
+	isPrivate: boolean,
+	currentPath: string,
+	normalizedRoot: string,
+	initialPath: string,
+	variables: Map<string, EnvironmentVariable>
+): void {
+	if (!envFile[environmentName]) {
+		return;
+	}
+
+	var isCurrentFolder = currentPath === initialPath;
+
+	for (var [varName, varValue] of Object.entries(envFile[environmentName])) {
+		var existing = variables.get(varName);
+		if (!existing) {
+			variables.set(varName, {
+				name: varName,
+				value: String(varValue),
+				isPrivate,
+				source: currentPath === normalizedRoot ? 'root' : getBaseName(currentPath),
+				isInherited: !isCurrentFolder,
+				isOverridden: false,
+				isShared: false,
+				isEditable: isCurrentFolder
+			});
+			continue;
+		}
+
+		var currentSource = currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
+		var isExistingFromCurrentFolder = existing.source === currentSource;
+
+		if (!isExistingFromCurrentFolder && !existing.parentValue && !existing.isInherited) {
+			existing.isOverridden = true;
+			existing.parentValue = String(varValue);
+			existing.parentIsPrivate = isPrivate;
+			existing.parentSource = currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
+		}
+	}
+}
+
+async function processEnvironmentFile(
+	envPath: string,
+	isPrivate: boolean,
+	environmentName: string,
+	currentPath: string,
+	normalizedRoot: string,
+	initialPath: string,
+	variables: Map<string, EnvironmentVariable>,
+	sharedVariables: Map<string, EnvironmentVariable>
+): Promise<void> {
+	try {
+		var content = await window.electronAPI.readFile(envPath);
+		if (!content) {
+			return;
+		}
+
+		var envFile = parseEnvironmentFile(content);
+		processEnvironmentVariables(
+			envFile,
+			environmentName,
+			isPrivate,
+			currentPath,
+			normalizedRoot,
+			initialPath,
+			variables
+		);
+
+        if (environmentName === '$shared') {
+            return;
+        }
+		processEnvironmentVariables(
+			envFile,
+            '$shared',
+			isPrivate,
+			currentPath,
+			normalizedRoot,
+			initialPath,
+			sharedVariables
+		);
+	} catch (error) {
+		// File doesn't exist, continue
+	}
+}
+
 export async function getEnvironmentVariables(
 	environmentName: string,
 	folderPath: string,
 	collectionRoot: string
 ): Promise<EnvironmentVariable[]> {
 	const variables = new Map<string, EnvironmentVariable>();
+	const sharedVariables = new Map<string, EnvironmentVariable>();
 	const normalizedRoot = collectionRoot.replace(/\\/g, '/');
 	let currentPath = folderPath.replace(/\\/g, '/');
 	const initialPath = currentPath;
@@ -210,91 +299,28 @@ export async function getEnvironmentVariables(
 	while (true) {
 		const publicEnvPath = joinPath(currentPath, 'http-client.env.json');
 		const privateEnvPath = joinPath(currentPath, 'http-client.private.env.json');
-		const isCurrentFolder = currentPath === initialPath;
 
-		try {
-			const privateContent = await window.electronAPI.readFile(privateEnvPath);
-			if (privateContent) {
-				const envFile = parseEnvironmentFile(privateContent);
-				if (envFile[environmentName]) {
-					for (const [varName, varValue] of Object.entries(envFile[environmentName])) {
-						const existing = variables.get(varName);
-						if (!existing) {
-							variables.set(varName, {
-								name: varName,
-								value: String(varValue),
-								isPrivate: true,
-								source:
-									currentPath === normalizedRoot
-										? 'root'
-										: getBaseName(currentPath),
-								isInherited: !isCurrentFolder,
-								isOverridden: false,
-								isEditable: isCurrentFolder
-							});
-						} else {
-							// Check if the existing variable's source is the current folder
-							const currentSource = currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
-							const isExistingFromCurrentFolder = existing.source === currentSource;
+		await processEnvironmentFile(
+			privateEnvPath,
+			true,
+			environmentName,
+			currentPath,
+			normalizedRoot,
+			initialPath,
+			variables,
+			sharedVariables
+		);
 
-							if (!isExistingFromCurrentFolder && !existing.parentValue && !existing.isInherited) {
-								// Variable is defined in current folder (not inherited) and this parent has a different value
-								// Only set parent value if it hasn't been set yet (to keep the immediate parent)
-								existing.isOverridden = true;
-								existing.parentValue = String(varValue);
-								existing.parentIsPrivate = true;
-								existing.parentSource =
-									currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
-							}
-						}
-					}
-				}
-			}
-		} catch (error) {
-			// File doesn't exist, continue
-		}
-
-		try {
-			const publicContent = await window.electronAPI.readFile(publicEnvPath);
-			if (publicContent) {
-				const envFile = parseEnvironmentFile(publicContent);
-				if (envFile[environmentName]) {
-					for (const [varName, varValue] of Object.entries(envFile[environmentName])) {
-						const existing = variables.get(varName);
-						if (!existing) {
-							variables.set(varName, {
-								name: varName,
-								value: String(varValue),
-								isPrivate: false,
-								source:
-									currentPath === normalizedRoot
-										? 'root'
-										: getBaseName(currentPath),
-								isInherited: !isCurrentFolder,
-								isOverridden: false,
-								isEditable: isCurrentFolder
-							});
-						} else {
-							// Check if the existing variable's source is the current folder
-							const currentSource = currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
-							const isExistingFromCurrentFolder = existing.source === currentSource;
-
-							if (!isExistingFromCurrentFolder && !existing.parentValue && !existing.isInherited) {
-								// Variable is defined in current folder (not inherited) and this parent has a different value
-								// Only set parent value if it hasn't been set yet (to keep the immediate parent)
-								existing.isOverridden = true;
-								existing.parentValue = String(varValue);
-								existing.parentIsPrivate = false;
-								existing.parentSource =
-									currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
-							}
-						}
-					}
-				}
-			}
-		} catch (error) {
-			// File doesn't exist, continue
-		}
+		await processEnvironmentFile(
+			publicEnvPath,
+			false,
+			environmentName,
+			currentPath,
+			normalizedRoot,
+			initialPath,
+			variables,
+			sharedVariables
+		);
 
 		if (currentPath === normalizedRoot) {
 			break;
@@ -309,6 +335,24 @@ export async function getEnvironmentVariables(
 			break;
 		}
 		currentPath = parentPath;
+	}
+
+	for (var [varName, sharedVar] of sharedVariables) {
+        const variable = variables.get(varName);
+		if (variable) {
+            if (!variable.parentValue) {
+                if (!sharedVar.isInherited) variable.isOverridden = true;
+                variable.parentValue = sharedVar.value;
+                variable.parentIsPrivate = sharedVar.isPrivate;
+                variable.parentSource = sharedVar.source;
+            }
+        } else {
+            sharedVar.isOverridden = false;
+            sharedVar.isInherited = true
+            sharedVar.isEditable = false;
+            sharedVar.isShared = true;
+			variables.set(varName, sharedVar);
+		}
 	}
 
 	return Array.from(variables.values());

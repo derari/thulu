@@ -358,6 +358,7 @@ describe('environmentParser - listAvailableEnvironments', () => {
         root: {
             title: 'root',
             folderPath: collectionRoot,
+            hasReadme: false,
             items: [
                 {
                     title: 'alice',
@@ -367,6 +368,7 @@ describe('environmentParser - listAvailableEnvironments', () => {
                         hasPublicEnv: true,
                         hasPrivateEnv: false
                     },
+                    hasReadme: false,
                     items: [
                         {
                             title: 'bob',
@@ -376,6 +378,7 @@ describe('environmentParser - listAvailableEnvironments', () => {
                                 hasPublicEnv: true,
                                 hasPrivateEnv: false
                             },
+                            hasReadme: false,
                             items: [
                                 {
                                     title: 'carol',
@@ -385,6 +388,7 @@ describe('environmentParser - listAvailableEnvironments', () => {
                                         hasPublicEnv: true,
                                         hasPrivateEnv: false
                                     },
+                                    hasReadme: false,
                                     items: []
                                 }
                             ]

@@ -24,14 +24,15 @@ function extractSectionName(line: string): string {
 	return afterMarker || '';
 }
 
-function parseVariables(lines: string[], startLine: number, endLine: number): Record<string, string> {
+function parseVariables(lines: string[], startLine: number, endLine: number, isOptions: boolean): Record<string, string> {
 	const variables: Record<string, string> = {};
 
 	for (let i = startLine - 1; i < endLine - 1 && i < lines.length; i++) {
 		const line = lines[i].trim();
+		const matchesPattern = isOptions ? startsWithOptionMarker(line) : line.startsWith('@');
 
-		if (line.startsWith('@')) {
-			const afterAt = line.substring(1);
+		if (matchesPattern) {
+			const afterAt = extractAfterMarker(line, isOptions);
 			const equalsIndex = afterAt.indexOf('=');
 
 			if (equalsIndex > 0) {
@@ -60,6 +61,26 @@ function parseVariables(lines: string[], startLine: number, endLine: number): Re
 	}
 
 	return variables;
+}
+
+function startsWithOptionMarker(line: string): boolean {
+	const trimmed = line.replace(/\s+/g, '');
+	return trimmed.startsWith('#@');
+}
+
+function extractAfterMarker(line: string, isOptions: boolean): string {
+	if (!isOptions) {
+		return line.substring(1);
+	}
+
+	const hashIndex = line.indexOf('#');
+	const afterHash = line.substring(hashIndex + 1).trimStart();
+
+	if (afterHash.startsWith('@')) {
+		return afterHash.substring(1);
+	}
+
+	return '';
 }
 
 function extractVerbAndUrl(
@@ -277,12 +298,14 @@ export function parseHttpFile(content: string): ParsedHttpFile {
 	// Calculate preamble (everything before first section)
 	const preambleStartLine = 1;
 	const preambleEndLine = sectionIndices.length > 0 ? sectionIndices[0] + 1 : lines.length + 1;
-	const preambleVariables = parseVariables(lines, preambleStartLine, preambleEndLine);
+	const preambleVariables = parseVariables(lines, preambleStartLine, preambleEndLine, false);
+	const preambleOptions = parseVariables(lines, preambleStartLine, preambleEndLine, true);
 
 	const preamble: Preamble = {
 		startLineNumber: preambleStartLine,
 		endLineNumber: preambleEndLine,
-		variables: Object.keys(preambleVariables).length > 0 ? preambleVariables : undefined
+		variables: preambleVariables,
+        options: preambleOptions
 	};
 
 	// Second pass: process sections
@@ -315,11 +338,13 @@ export function parseHttpFile(content: string): ParsedHttpFile {
 			const preambleStart = i + 2; // Line after section marker (1-indexed)
 			const preambleEnd = requestStartLineNumber; // Request line (1-indexed)
 			if (preambleStart < preambleEnd) {
-				const sectionVariables = parseVariables(lines, preambleStart, preambleEnd);
+				const sectionVariables = parseVariables(lines, preambleStart, preambleEnd, false);
+				const sectionOptions = parseVariables(lines, preambleStart, preambleEnd, true);
 				sectionPreamble = {
 					startLineNumber: preambleStart,
 					endLineNumber: preambleEnd,
-					variables: Object.keys(sectionVariables).length > 0 ? sectionVariables : undefined
+					variables: sectionVariables,
+                    options: sectionOptions
 				};
 			}
 		}

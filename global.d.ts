@@ -45,7 +45,8 @@ declare global {
                 url: string,
                 method: string,
                 headers: Record<string, string>,
-                body?: string
+                body?: string,
+                rejectUnauthorized?: boolean
             }) => Promise<{
                 ok: boolean,
                 status: number,

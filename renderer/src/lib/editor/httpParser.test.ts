@@ -14,7 +14,9 @@ GET https://api.example.com`;
 
 			expect(result.preamble).toEqual({
 				startLineNumber: 1,
-				endLineNumber: 4
+				endLineNumber: 4,
+                variables: {},
+                options: {}
 			});
 		});
 
@@ -26,7 +28,9 @@ GET https://api.example.com`;
 
 			expect(result.preamble).toEqual({
 				startLineNumber: 1,
-				endLineNumber: 1
+				endLineNumber: 1,
+                variables: {},
+                options: {}
 			});
 		});
 
@@ -47,7 +51,9 @@ GET https://api.example.com`;
 
 			expect(result.preamble).toEqual({
 				startLineNumber: 1,
-				endLineNumber: 2 // 1 line (from split of empty string) + 1
+				endLineNumber: 2, // 1 line (from split of empty string) + 1
+                variables: {},
+                options: {}
 			});
 			expect(result.sections).toHaveLength(0);
 			expect(result.lines).toEqual(['']);
@@ -60,7 +66,9 @@ GET https://api.example.com`;
 
 			expect(result.preamble).toEqual({
 				startLineNumber: 1,
-				endLineNumber: 5 // 4 lines (from split) + 1
+				endLineNumber: 5, // 4 lines (from split) + 1
+                variables: {},
+                options: {}
 			});
 			expect(result.sections).toHaveLength(0);
 			expect(result.lines).toHaveLength(4); // 3 newlines create 4 lines
@@ -73,7 +81,9 @@ GET https://api.example.com`;
 
 			expect(result.preamble).toEqual({
 				startLineNumber: 1,
-				endLineNumber: 5 // 4 lines (from split) + 1
+				endLineNumber: 5, // 4 lines (from split) + 1
+                variables: {},
+                options: {}
 			});
 			expect(result.sections).toHaveLength(0);
 		});
@@ -319,7 +329,9 @@ GET https://api.example.com/users`;
 			expect(result.sections[0]).toBeDefined();
 			expect(result.sections[0].preamble).toEqual({
 				startLineNumber: 2,
-				endLineNumber: 4
+				endLineNumber: 4,
+                variables: {},
+                options: {}
 			});
 		});
 
@@ -992,7 +1004,7 @@ GET https://api.example.com`;
 
 			const result = parseHttpFile(content);
 
-			expect(result.preamble.variables).toBeUndefined();
+			expect(result.preamble.variables).toStrictEqual({});
 			expect(result.sections[0].preamble).toBeUndefined();
 		});
 
