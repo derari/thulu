@@ -25,6 +25,7 @@ declare global {
     interface CollectionMetaData {
         path: string;
         name: string;
+        collapsedPaths?: string[];
     }
 
     // The Window interface is where the preload script exposes its API to the renderer process.

@@ -4,7 +4,8 @@
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
     import type {CollectionItem, EnvironmentConfig, HttpSection} from './collection';
-    import {ChevronRight, Settings, MoreVertical, AlertTriangle, Info} from 'lucide-svelte';
+    import {AlertTriangle, ChevronRight, Info, MoreVertical, Settings} from 'lucide-svelte';
+    import {onMount} from 'svelte';
     import {flattenCollection, flattenItems, formatVerb, getVerbColor} from './CollectionItemsUtils';
     import RenameModal from './RenameModal.svelte';
     import NewItemModal from './NewItemModal.svelte';
@@ -32,6 +33,46 @@
     const DELETE_CONFIRMATION_TIMEOUT = 10000;
 
     let collapsed: Set<string> = new Set();
+    let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let cachedPreferences: Preferences | null = null;
+
+    // Keep a local cache of preferences and react to collection changes
+    onMount(() => {
+        const unsubscribe = window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
+            cachedPreferences = preferences;
+            // Initialize collapsed state if we have a current collection and haven't loaded yet
+            if ($currentCollection && lastLoadedCollectionPath !== $currentCollection.path) {
+                lastLoadedCollectionPath = $currentCollection.path;
+                const entry = preferences.collections?.find(c => c.path === $currentCollection!.path);
+                collapsed = new Set(entry?.collapsedPaths ?? []);
+            }
+        });
+        window.electronAPI.requestPreferences();
+        return unsubscribe;
+    });
+
+    // Re-initialize collapsed state whenever the active collection changes (and prefs are already loaded)
+    let lastLoadedCollectionPath: string | null = null;
+    $: if ($currentCollection && cachedPreferences && $currentCollection.path !== lastLoadedCollectionPath) {
+        lastLoadedCollectionPath = $currentCollection.path;
+        const entry = cachedPreferences.collections?.find(c => c.path === $currentCollection!.path);
+        collapsed = new Set(entry?.collapsedPaths ?? []);
+    }
+
+    function saveCollapsedState() {
+        if (saveDebounceTimer !== null) clearTimeout(saveDebounceTimer);
+        saveDebounceTimer = setTimeout(() => {
+            const collectionPath = $currentCollection?.path;
+            if (!collectionPath) return;
+            const prefs = cachedPreferences;
+            const existing = prefs?.collections ?? [];
+            const updated: CollectionMetaData[] = existing.some(c => c.path === collectionPath)
+                ? existing.map(c => c.path === collectionPath ? {...c, collapsedPaths: [...collapsed]} : c)
+                : [...existing, {path: collectionPath, name: $currentCollection?.name ?? '', collapsedPaths: [...collapsed]}];
+            window.electronAPI.savePreferences({collections: updated});
+        }, 300);
+    }
+
     let openMenuKey: string | null = null;
     let confirmDeleteKey: string | null = null;
     let confirmDeleteItem: CollectionItem | null = null;
@@ -61,6 +102,7 @@
             collapsed.add(key);
         }
         collapsed = new Set(collapsed);
+        saveCollapsedState();
     }
 
     function isCollapsed(key: string | undefined): boolean {
