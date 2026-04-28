@@ -1,4 +1,4 @@
-import type {CollectionItem, EnvironmentConfig, HttpSection} from './collection';
+import type { CollectionItem, EnvironmentConfig, HttpSection } from './collection';
 
 export interface DisplayItem {
     item: CollectionItem;
@@ -40,10 +40,13 @@ export function getVerbColor(verb: string): string {
     }
 }
 
-export function flattenCollection(root: CollectionItem, checkCollapsed: (key: string) => boolean): DisplayItem[] {
+export function flattenCollection(
+    root: CollectionItem,
+    checkCollapsed: (key: string) => boolean
+): DisplayItem[] {
     let result = flattenItems(root.items || [], 0, checkCollapsed);
     result.unshift({
-        item: {title: 'Environments', environments: root.environments},
+        item: { title: 'Environments', environments: root.environments },
         indent: 0,
         isSection: false,
         isFolder: false,
@@ -59,7 +62,11 @@ export function flattenCollection(root: CollectionItem, checkCollapsed: (key: st
     return result;
 }
 
-export function flattenItems(items: CollectionItem[], depth: number, checkCollapsed: (key: string) => boolean): DisplayItem[] {
+export function flattenItems(
+    items: CollectionItem[],
+    depth: number,
+    checkCollapsed: (key: string) => boolean
+): DisplayItem[] {
     const result: DisplayItem[] = [];
     for (const item of items) {
         const hasFolder = !!item.folderPath;
@@ -67,9 +74,12 @@ export function flattenItems(items: CollectionItem[], depth: number, checkCollap
         const hasSections = hasFile && !!item.sections && item.sections.length > 0;
         const hasSubItems = hasFolder && !!item.items && item.items.length > 0;
         const hasEnvironments = !!item.environments;
-        const hasChildren = (hasFolder && (hasSubItems || hasEnvironments)) || (hasFile && hasSections);
+        // Folder-only environments are shown inline on the folder row, not as child rows
+        const hasEnvironmentRow = hasEnvironments && hasFile;
+        const hasChildren =
+            (hasFolder && hasSubItems) || hasEnvironmentRow || (hasFile && hasSections);
         result.push({
-            item: {...item},
+            item: { ...item },
             indent: depth,
             isSection: false,
             isFolder: hasFolder,
@@ -101,30 +111,30 @@ export function flattenItems(items: CollectionItem[], depth: number, checkCollap
                     isEnvironment: false
                 });
             }
-			if (hasEnvironments || hasSubItems) {
-				result.push({
-					item: {title: ''},
-					indent: depth,
-					isSection: true,
-					section: {
-						name: '',
-						startLineNumber: 0,
-						endLineNumber: 0,
-						verb: '',
-						url: '',
-						isDivider: true,
-						postScripts: []
-					},
-					isFolder: false,
-					isFile: false,
-					hasChildren: false,
-					isEnvironment: false
-				});
-			}
+            if (hasEnvironmentRow || hasSubItems) {
+                result.push({
+                    item: { title: '' },
+                    indent: depth,
+                    isSection: true,
+                    section: {
+                        name: '',
+                        startLineNumber: 0,
+                        endLineNumber: 0,
+                        verb: '',
+                        url: '',
+                        isDivider: true,
+                        postScripts: []
+                    },
+                    isFolder: false,
+                    isFile: false,
+                    hasChildren: false,
+                    isEnvironment: false
+                });
+            }
         }
-        if (hasEnvironments) {
+        if (hasEnvironmentRow) {
             result.push({
-                item: {title: 'Environments', environments: item.environments},
+                item: { title: 'Environments', environments: item.environments },
                 indent: depth + 1,
                 isSection: false,
                 isFolder: false,
@@ -140,4 +150,3 @@ export function flattenItems(items: CollectionItem[], depth: number, checkCollap
     }
     return result;
 }
-

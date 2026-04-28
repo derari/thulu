@@ -4,7 +4,7 @@
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
     import type {CollectionItem, EnvironmentConfig, HttpSection} from './collection';
-    import {AlertTriangle, ChevronRight, Info, MoreVertical, Settings} from 'lucide-svelte';
+    import {ChevronRight, EllipsisVertical, Info, Settings, TriangleAlert} from 'lucide-svelte';
     import {onMount} from 'svelte';
     import {flattenCollection, flattenItems, formatVerb, getVerbColor} from './CollectionItemsUtils';
     import RenameModal from './RenameModal.svelte';
@@ -64,8 +64,7 @@
         saveDebounceTimer = setTimeout(() => {
             const collectionPath = $currentCollection?.path;
             if (!collectionPath) return;
-            const prefs = cachedPreferences;
-            const existing = prefs?.collections ?? [];
+            const existing = cachedPreferences?.collections ?? [];
             const updated: CollectionMetaData[] = existing.some(c => c.path === collectionPath)
                 ? existing.map(c => c.path === collectionPath ? {...c, collapsedPaths: [...collapsed]} : c)
                 : [...existing, {path: collectionPath, name: $currentCollection?.name ?? '', collapsedPaths: [...collapsed]}];
@@ -125,7 +124,7 @@
         const closed = openEnvironments.close();
         if (closed) {
             // Environments view closed successfully, open the file
-            openFile.openFile(item.filePath, section?.startLineNumber);
+            await openFile.openFile(item.filePath, section?.startLineNumber);
         }
         // If not closed, modal will be shown and navigation will happen after user decision
     }
@@ -539,7 +538,7 @@ GET https://example.com
                                                 title="Confirm delete"
                                                 aria-label="Confirm delete"
                                         >
-                                            <AlertTriangle size={16}/>
+                                            <TriangleAlert size={16}/>
                                         </button>
                                     {:else}
                                         <button
@@ -548,7 +547,7 @@ GET https://example.com
                                                 title="More options"
                                                 aria-label="More options"
                                         >
-                                            <MoreVertical size={16}/>
+                                            <EllipsisVertical size={16}/>
                                         </button>
 
                                         {#if openMenuKey === itemKey}
@@ -603,7 +602,42 @@ GET https://example.com
                             <span class="item-title">{item.title}</span>
 
                             {#if !isSection && (item.folderPath || item.filePath)}
+                                {@const envKey = `${itemKey}:env`}
+                                {@const hasInlineEnv = !!environmentConfig && !isRootEnvironment(environmentConfig) && !!item.folderPath && !item.filePath}
                                 <div class="item-actions">
+                                    {#if item.hasReadme}
+                                        <button
+                                                class="action-button info-button"
+                                                on:click={(e) => handleInfoClick(e, item.folderPath || '', item.title)}
+                                                title="Contains README"
+                                                aria-label="Contains README"
+                                        >
+                                            <Info size={16}/>
+                                        </button>
+                                    {/if}
+
+                                    {#if hasInlineEnv}
+                                        {#if confirmDeleteKey === envKey}
+                                            <button
+                                                    class="action-button confirm-delete-button"
+                                                    on:click={(e) => confirmDelete(e)}
+                                                    title="Confirm delete environment"
+                                                    aria-label="Confirm delete environment"
+                                            >
+                                                <TriangleAlert size={16}/>
+                                            </button>
+                                        {:else}
+                                            <button
+                                                    class="action-button environment-button"
+                                                    on:click={(e) => { e.stopPropagation(); handleEnvironmentClick(environmentConfig!) }}
+                                                    title="Open Environment"
+                                                    aria-label="Open Environment"
+                                            >
+                                                <Settings size={16}/>
+                                            </button>
+                                        {/if}
+                                    {/if}
+
                                     {#if confirmDeleteKey === itemKey}
                                         <button
                                                 class="action-button confirm-delete-button"
@@ -611,26 +645,16 @@ GET https://example.com
                                                 title="Confirm delete"
                                                 aria-label="Confirm delete"
                                         >
-                                            <AlertTriangle size={16}/>
+                                            <TriangleAlert size={16}/>
                                         </button>
                                     {:else}
-                                        {#if item.hasReadme}
-                                            <button
-                                                    class="action-button info-button"
-                                                    on:click={(e) => handleInfoClick(e, item.folderPath || '', item.title)}
-                                                    title="Contains README"
-                                                    aria-label="Contains README"
-                                            >
-                                                <Info size={16}/>
-                                            </button>
-                                        {/if}
                                         <button
                                                 class="action-button menu-button"
                                                 on:click={(e) => toggleMenu(e, itemKey)}
                                                 title="More options"
                                                 aria-label="More options"
                                         >
-                                            <MoreVertical size={16}/>
+                                            <EllipsisVertical size={16}/>
                                         </button>
 
                                         {#if openMenuKey === itemKey}
@@ -672,6 +696,14 @@ GET https://example.com
                                                     Rename
                                                 </button>
                                                 <div class="dropdown-separator"></div>
+                                                {#if hasInlineEnv}
+                                                    <button
+                                                            class="dropdown-item delete-item"
+                                                            on:click={(e) => handleDeleteEnvironment(e, envKey, environmentConfig!)}
+                                                    >
+                                                        Delete Environment
+                                                    </button>
+                                                {/if}
                                                 {#if item.filePath}
                                                     <button
                                                             class="dropdown-item delete-item"
@@ -875,6 +907,14 @@ GET https://example.com
     }
 
     .info-button:hover {
+        color: var(--text-primary);
+    }
+
+    .environment-button {
+        color: var(--text-secondary);
+    }
+
+    .environment-button:hover {
         color: var(--text-primary);
     }
 
