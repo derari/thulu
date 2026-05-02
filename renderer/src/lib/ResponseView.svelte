@@ -17,14 +17,19 @@
 
     export let orientation: 'horizontal' | 'vertical' = 'vertical';
 
+    var activeTab: 'response' | 'request' = 'response';
     var size: number = 400;
     var isResizing = false;
     var startPos = 0;
     var startSize = 0;
     var editorElement: HTMLDivElement;
     var editor: EditorView | null = null;
+    var requestEditorElement: HTMLDivElement;
+    var requestEditor: EditorView | null = null;
     var httpLang: ReturnType<typeof createHttpLanguage> = createHttpLanguage({mode: 'response'});
     var httpBodyBg = createHttpBodyLineBackground({mode: 'response'});
+    var requestHttpLang: ReturnType<typeof createHttpLanguage> = createHttpLanguage({mode: 'request'});
+    var requestHttpBodyBg = createHttpBodyLineBackground({mode: 'request'});
     var headerCount: number = 0;
     var emptyLineNumber: number = 0;
     var redirectPreambleLines: number = 0;
@@ -97,6 +102,57 @@
     function toggleFormat() {
         isFormatted = !isFormatted;
         updateEditor($httpResponse);
+    }
+
+    function createRequestEditor() {
+        if (!requestEditorElement) return;
+
+        const state = EditorState.create({
+            doc: '',
+            extensions: [
+                lineNumbers(),
+                requestHttpLang.language,
+                httpSyntaxHighlighting,
+                httpEditorTheme,
+                requestHttpBodyBg.plugin,
+                EditorView.lineWrapping,
+                EditorView.editable.of(false),
+                EditorState.readOnly.of(true)
+            ]
+        });
+
+        requestEditor = new EditorView({
+            state,
+            parent: requestEditorElement
+        });
+    }
+
+    function updateRequestEditor(response: typeof $httpResponse) {
+        if (!requestEditor) return;
+
+        if (!response?.resolvedRequest) {
+            requestEditor.dispatch({
+                changes: {from: 0, to: requestEditor.state.doc.length, insert: ''}
+            });
+            return;
+        }
+
+        const req = response.resolvedRequest;
+        const lines: string[] = [];
+        lines.push(`${req.method} ${req.url}`);
+        for (const [key, value] of Object.entries(req.headers)) {
+            lines.push(`${key}: ${value}`);
+        }
+        lines.push('');
+        if (req.body) {
+            lines.push(req.body);
+        }
+        const text = lines.join('\n');
+
+        requestEditor.dispatch({
+            changes: {from: 0, to: requestEditor.state.doc.length, insert: text},
+            effects: EditorView.scrollIntoView(0, {y: 'start'})
+        });
     }
 
     function createEditor() {
@@ -182,7 +238,7 @@
         if (response.redirects && response.redirects.length > 0) {
             lines.push('Redirects');
             for (const hop of response.redirects) {
-                lines.push(`-> ${hop.status} ${hop.method}: ${hop.url}`);
+                lines.push(`-> ${hop.status}: ${hop.method} ${hop.url}`);
             }
             lines.push('');
         }
@@ -193,10 +249,12 @@
             lines.push(`${key}: ${value}`);
         }
 
-        lines.push('');
+        if (rawBody) {
+            lines.push('');
 
-        const bodyToUse = (isFormatted && canFormat) ? formatBody(rawBody, contentType) : rawBody;
-        lines.push(bodyToUse);
+            const bodyToUse = (isFormatted && canFormat) ? formatBody(rawBody, contentType) : rawBody;
+            lines.push(bodyToUse);
+        }
 
         const text = lines.join('\n');
         const bodyStartLine = emptyLineNumber + 1;
@@ -233,6 +291,10 @@
             editor.destroy();
             editor = null;
         }
+        if (requestEditor) {
+            requestEditor.destroy();
+            requestEditor = null;
+        }
     }
 
     function handleMouseDown(event: MouseEvent) {
@@ -265,13 +327,20 @@
         window.removeEventListener('mouseup', handleMouseUp);
     }
 
-    $: headerTitle = $httpResponse ? `Response after ${$httpResponse.timeMs}ms` : 'Response';
+    $: headerTitle = $httpResponse ? `Completed in ${$httpResponse.timeMs}ms` : '';
     $: if (editor) {
         updateEditor($httpResponse);
+    }
+    $: if (requestEditor) {
+        updateRequestEditor($httpResponse);
+    }
+    $: if ($httpResponse) {
+        activeTab = 'response';
     }
 
     onMount(() => {
         createEditor();
+        createRequestEditor();
 
         window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
             if (orientation === 'vertical' && preferences.responseWidth && preferences.responseWidth >= 200) {
@@ -310,12 +379,20 @@
 <div class="response-view" class:horizontal={orientation === 'horizontal'} class:vertical={orientation === 'vertical'}
      style={sizeStyle}>
     <div class="response-header">
+        <div class="tabs">
+            <button class="tab" class:active={activeTab === 'response'} on:click={() => activeTab = 'response'}>Response</button>
+            <button class="tab" class:active={activeTab === 'request'} on:click={() => activeTab = 'request'}>Request</button>
+        </div>
         <span class="response-title">{headerTitle}</span>
     </div>
     <div class="response-content">
-        <div bind:this={editorElement} class="editor-container"></div>
-        {#if !$httpResponse}
+        <div bind:this={editorElement} class="editor-container" class:hidden={activeTab !== 'response'}></div>
+        <div bind:this={requestEditorElement} class="editor-container" class:hidden={activeTab !== 'request'}></div>
+        {#if !$httpResponse && activeTab === 'response'}
             <p class="no-response">No response yet</p>
+        {/if}
+        {#if !$httpResponse?.resolvedRequest && activeTab === 'request'}
+            <p class="no-response">No request yet</p>
         {/if}
     </div>
 </div>
@@ -372,6 +449,40 @@
         font-weight: 600;
         color: var(--text-primary);
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .tab {
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        cursor: pointer;
+    }
+
+    .tab:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover, var(--border-default));
+    }
+
+    .tab.active {
+        color: var(--interactive-primary);
+        border-color: var(--interactive-primary);
+        background: none;
+    }
+
+    .editor-container.hidden {
+        display: none;
     }
 
     .response-title {

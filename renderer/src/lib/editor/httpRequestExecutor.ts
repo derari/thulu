@@ -11,6 +11,13 @@ export interface RequestExecutionParams {
     globalVariables?: Record<string, string>;
 }
 
+export interface ResolvedRequest {
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    body?: string;
+}
+
 export interface HttpRequestResponse {
     statusLine: string;
     headers: Record<string, string>;
@@ -18,6 +25,7 @@ export interface HttpRequestResponse {
     timeMs: number;
     scriptResults?: ScriptExecutionResult[];
     redirects?: { status: number; method: string; url: string }[];
+    resolvedRequest?: ResolvedRequest;
 }
 
 export interface ScriptExecutionResult {
@@ -316,6 +324,13 @@ export async function executeHttpRequest(
         body = substituteVariables(body, variables);
     }
 
+    const resolvedRequest: ResolvedRequest = {
+        method: section.verb,
+        url,
+        headers: encodedHeaders,
+        body: body || undefined
+    };
+
     console.log('Executing request:', { verb: section.verb, url, headers: encodedHeaders, body });
 
     const noValidateCerts = evaluateFlag(getOptionValue(parsedFile, section, 'no-validate-certs'));
@@ -355,7 +370,10 @@ export async function executeHttpRequest(
             timeMs,
             scriptResults,
             redirects:
-                response.redirects && response.redirects.length > 0 ? response.redirects : undefined
+                response.redirects && response.redirects.length > 0
+                    ? response.redirects
+                    : undefined,
+            resolvedRequest
         };
     } catch (error) {
         const endTime = performance.now();
@@ -366,7 +384,8 @@ export async function executeHttpRequest(
             statusLine: 'Error',
             headers: {},
             body: error instanceof Error ? error.message : String(error),
-            timeMs
+            timeMs,
+            resolvedRequest
         };
     }
 }

@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import type { ResolvedRequest } from '../editor/httpRequestExecutor.js';
 
 export interface HttpResponse {
     statusLine: string;
@@ -6,6 +7,7 @@ export interface HttpResponse {
     body: string;
     timeMs: number;
     redirects?: { status: number; method: string; url: string }[];
+    resolvedRequest?: ResolvedRequest;
 }
 
 function createHttpResponseStore() {
