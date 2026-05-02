@@ -47,13 +47,15 @@ declare global {
                 method: string,
                 headers: Record<string, string>,
                 body?: string,
-                rejectUnauthorized?: boolean
+                rejectUnauthorized?: boolean,
+                followRedirects?: boolean
             }) => Promise<{
                 ok: boolean,
                 status: number,
                 statusText: string,
                 headers: Record<string, string>,
-                body: string
+                body: string,
+                redirects: { status: number, method: string, url: string }[]
             }>;
             executeScript: (params: {
                 code: string,

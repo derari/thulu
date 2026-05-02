@@ -1,10 +1,23 @@
-import {app, BrowserWindow, dialog, ipcMain, shell, Menu} from 'electron';
+import {app, BrowserWindow, dialog, ipcMain, Menu, shell} from 'electron';
 import * as path from "path";
 import * as fs from "fs";
 import * as https from "https";
 import * as http from "http";
 import serve from 'electron-serve';
-import {loadPreferences, savePreferences, readFile, readFileBinary, writeFile, listDirectory, fileExists, deletePath, renamePath, createFolder, createFile, updateCollectionName} from './fileOperations.js';
+import {
+    createFile,
+    createFolder,
+    deletePath,
+    fileExists,
+    listDirectory,
+    loadPreferences,
+    readFile,
+    readFileBinary,
+    renamePath,
+    savePreferences,
+    updateCollectionName,
+    writeFile
+} from './fileOperations.js';
 import {executeScript, type ScriptExecutionParams} from './scriptExecutor.js';
 
 const serveURL = serve({directory: '.'});
@@ -147,19 +160,30 @@ app.on("window-all-closed", function handleWindowAllClosed() {
     }
 });
 
-function makeHttpRequest(options: {
-    url: string;
-    method: string;
-    headers: Record<string, string>;
-    body?: string;
-    rejectUnauthorized?: boolean;
-}): Promise<{
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 10;
+
+interface HttpRawResponse {
     ok: boolean;
     status: number;
     statusText: string;
     headers: Record<string, string>;
     body: string;
-}> {
+}
+
+interface RedirectHop {
+    status: number;
+    method: string;
+    url: string;
+}
+
+function makeSingleHttpRequest(options: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    rejectUnauthorized?: boolean;
+}): Promise<HttpRawResponse> {
     return new Promise((resolve, reject) => {
         const urlObj = new URL(options.url);
         const isHttps = urlObj.protocol === 'https:';
@@ -213,6 +237,66 @@ function makeHttpRequest(options: {
 
         req.end();
     });
+}
+
+async function makeHttpRequest(options: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    rejectUnauthorized?: boolean;
+    followRedirects?: boolean;
+}): Promise<HttpRawResponse & { redirects: RedirectHop[] }> {
+    const followRedirects = options.followRedirects ?? true;
+    const redirects: RedirectHop[] = [];
+
+    let currentUrl = options.url;
+    let currentMethod = options.method;
+    let currentBody: string | undefined = options.body;
+
+    for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt++) {
+        const response = await makeSingleHttpRequest({
+            url: currentUrl,
+            method: currentMethod,
+            headers: options.headers,
+            body: currentBody,
+            rejectUnauthorized: options.rejectUnauthorized
+        });
+
+        if (!followRedirects || !REDIRECT_STATUSES.has(response.status)) {
+            return { ...response, redirects };
+        }
+
+        if (attempt === MAX_REDIRECTS) {
+                const hopList = redirects.map(r => `  -> ${r.status} ${r.method}: ${r.url}`).join('\n');
+                throw new Error(`Too many redirects (max ${MAX_REDIRECTS}):\n${hopList}`);
+        }
+
+        const location = response.headers['location'];
+        if (!location) {
+            return { ...response, redirects };
+        }
+
+        // Resolve relative redirects
+        const nextUrl = new URL(location, currentUrl).toString();
+
+        // Determine the method for the next request
+        let nextMethod = currentMethod;
+        if (response.status === 303 || ((response.status === 301 || response.status === 302) && currentMethod === 'POST')) {
+            nextMethod = 'GET';
+        }
+
+        redirects.push({ status: response.status, method: nextMethod, url: nextUrl });
+
+        currentUrl = nextUrl;
+        currentMethod = nextMethod;
+        // Body is dropped when switching to GET
+        if (nextMethod === 'GET') {
+            currentBody = undefined;
+        }
+    }
+
+    throw new Error('Redirect loop');
 }
 
 app.once('ready', function handleIPCReady() {
@@ -271,6 +355,7 @@ app.once('ready', function handleIPCReady() {
         headers: Record<string, string>;
         body?: string;
         rejectUnauthorized?: boolean;
+        followRedirects?: boolean;
     }) {
         return makeHttpRequest(options);
     });

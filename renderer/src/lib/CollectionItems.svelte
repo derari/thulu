@@ -783,7 +783,7 @@ GET https://example.com
     }
 
     .item {
-        padding: 0.5rem 0;
+
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -792,6 +792,7 @@ GET https://example.com
     }
 
     .item-title {
+        padding: 0.35rem 0;
         flex: 1;
         min-width: 0;
         overflow: hidden;
@@ -856,7 +857,7 @@ GET https://example.com
     .verb-badge {
         font-size: 0.55rem;
         font-weight: 600;
-        padding: 2px 4px 1px 4px;
+        padding: 2px 4px 0 4px;
         border: 1px solid currentColor;
         border-radius: 3px;
         font-family: 'Monaspace Neon', 'Consolas', 'Monaco', 'Courier New', monospace;

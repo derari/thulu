@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         headers: Record<string, string>;
         body?: string;
         rejectUnauthorized?: boolean;
+        followRedirects?: boolean;
     }) => {
         return await ipcRenderer.invoke('http:request', options);
     },

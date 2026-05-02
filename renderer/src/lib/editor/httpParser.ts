@@ -1,10 +1,10 @@
 import type {
-	HttpBodySection,
-	HttpHeaderSection,
-	HttpSection,
-	ParsedHttpResponse,
-	PostScript,
-	Preamble
+    HttpBodySection,
+    HttpHeaderSection,
+    HttpSection,
+    ParsedHttpResponse,
+    PostScript,
+    Preamble
 } from '../collection';
 
 export type { ParsedHttpResponse, HttpSection, HttpBodySection };
@@ -390,16 +390,28 @@ export function parseHttpResponse(content: string): ParsedHttpResponse | null {
 		return null;
 	}
 
-	// First line should be the status line (e.g., "HTTP/1.1 200 OK")
-	const statusLine = lines[0].trim();
-	const match = statusLine.match(HTTP_RESPONSE_PATTERN);
+	// Find the first status line (e.g., "HTTP/1.1 200 OK") — may be preceded by a redirect preamble
+	let statusLineIndex = -1;
+	let statusLine = '';
+	let match: RegExpMatchArray | null = null;
+	for (let i = 0; i < lines.length; i++) {
+		const candidate = lines[i].trim();
+		match = candidate.match(HTTP_RESPONSE_PATTERN);
+		if (match) {
+			statusLineIndex = i;
+			statusLine = candidate;
+			break;
+		}
+	}
 
-	if (!match) {
+	if (statusLineIndex === -1 || !match) {
 		return null;
 	}
 
 	const code = parseInt(match[1], 10);
-	let headerStartLine = 2; // Line after status line (1-indexed)
+	// Line numbers are 1-indexed relative to the full content
+	const statusLineNumber = statusLineIndex + 1;
+	let headerStartLine = statusLineNumber + 1;
 	let headerEndLine = headerStartLine;
 	let bodyStartLine: number | undefined;
 	let bodyEndLine: number | undefined;
@@ -407,7 +419,7 @@ export function parseHttpResponse(content: string): ParsedHttpResponse | null {
 
 	// Parse headers (lines after status line until empty line)
 	let foundEmptyLine = false;
-	for (let i = 1; i < lines.length; i++) {
+	for (let i = statusLineIndex + 1; i < lines.length; i++) {
 		const line = lines[i].trim();
 
 		if (line === '') {

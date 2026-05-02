@@ -27,6 +27,7 @@
     var httpBodyBg = createHttpBodyLineBackground({mode: 'response'});
     var headerCount: number = 0;
     var emptyLineNumber: number = 0;
+    var redirectPreambleLines: number = 0;
     var isFormatted: boolean = true;
     var rawBody: string = '';
     var contentType: string = '';
@@ -36,11 +37,16 @@
         if (!response) {
             headerCount = 0;
             emptyLineNumber = 0;
+            redirectPreambleLines = 0;
             return;
         }
 
+        redirectPreambleLines = response.redirects && response.redirects.length > 0
+            ? response.redirects.length + 2  // "Redirects" header + N hop lines + empty separator
+            : 0;
         headerCount = Object.keys(response.headers).length;
-        emptyLineNumber = 1 + headerCount + 1;
+        // redirectPreambleLines + status line + headers + empty line
+        emptyLineNumber = redirectPreambleLines + 1 + headerCount + 1;
     }
 
     function canFormatContentType(ct: string): boolean {
@@ -101,14 +107,19 @@
             extensions: [
                 lineNumbers({
                     formatNumber: (lineNo: number) => {
-                        if (lineNo === 1) {
+                        // Redirect preamble lines (redirect hops + empty separator) — no line numbers
+                        if (lineNo <= redirectPreambleLines) {
+                            return '';
+                        }
+                        // Status line
+                        if (lineNo === redirectPreambleLines + 1) {
                             return '';
                         }
                         if (lineNo === emptyLineNumber) {
                             return '';
                         }
                         if (lineNo < emptyLineNumber) {
-                            return String(lineNo - 1);
+                            return String(lineNo - redirectPreambleLines - 1);
                         }
                         if (lineNo > emptyLineNumber) {
                             return String(lineNo - emptyLineNumber);
@@ -166,6 +177,16 @@
         const canFormat = canFormatContentType(contentType);
 
         const lines: string[] = [];
+
+        // Redirect preamble
+        if (response.redirects && response.redirects.length > 0) {
+            lines.push('Redirects');
+            for (const hop of response.redirects) {
+                lines.push(`-> ${hop.status} ${hop.method}: ${hop.url}`);
+            }
+            lines.push('');
+        }
+
         lines.push(response.statusLine);
 
         for (const [key, value] of Object.entries(response.headers)) {
@@ -180,7 +201,8 @@
         const text = lines.join('\n');
         const bodyStartLine = emptyLineNumber + 1;
 
-        // Parse the response and update the language definition
+        // Parse the response — parseHttpResponse now scans for the first HTTP/... line,
+        // so it works correctly whether or not a redirect preamble is present.
         const parsedResponse = parseHttpResponse(text);
         httpLang.updateParsedResponse(parsedResponse);
         httpBodyBg.updateParsedResponse(parsedResponse);

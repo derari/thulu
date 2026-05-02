@@ -17,6 +17,7 @@ export interface HttpRequestResponse {
     body: string;
     timeMs: number;
     scriptResults?: ScriptExecutionResult[];
+    redirects?: { status: number; method: string; url: string }[];
 }
 
 export interface ScriptExecutionResult {
@@ -316,6 +317,7 @@ export async function executeHttpRequest(
     console.log('Executing request:', { verb: section.verb, url, headers: encodedHeaders, body });
 
     const noValidateCerts = evaluateFlag(getOptionValue(parsedFile, section, 'no-validate-certs'));
+    const noRedirect = evaluateFlag(getOptionValue(parsedFile, section, 'no-redirect'));
 
     const startTime = performance.now();
 
@@ -325,7 +327,8 @@ export async function executeHttpRequest(
             method: section.verb,
             headers: encodedHeaders,
             body: body || undefined,
-            rejectUnauthorized: !noValidateCerts
+            rejectUnauthorized: !noValidateCerts,
+            followRedirects: !noRedirect
         });
 
         const endTime = performance.now();
@@ -348,7 +351,9 @@ export async function executeHttpRequest(
             headers: response.headers,
             body: response.body,
             timeMs,
-            scriptResults
+            scriptResults,
+            redirects:
+                response.redirects && response.redirects.length > 0 ? response.redirects : undefined
         };
     } catch (error) {
         const endTime = performance.now();

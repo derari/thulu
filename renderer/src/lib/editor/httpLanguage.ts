@@ -2,7 +2,7 @@ import { StreamLanguage } from '@codemirror/language';
 import { getHighlighterForContentType } from './contentTypeMapping.js';
 import type { HttpBodySection, ParsedHttpFile, ParsedHttpResponse } from './httpParser.js';
 
-type ParserState = 'preamble' | 'section-title' | 'headers' | 'body' | 'status-line';
+type ParserState = 'preamble' | 'section-title' | 'headers' | 'body' | 'status-line' | 'redirect';
 
 interface HttpState {
     state: ParserState;
@@ -179,10 +179,28 @@ export function createHttpLanguage(config: HttpLanguageConfig = {}) {
                 if (stream.sol()) {
                     // Response status line (HTTP/1.1 200 OK)
                     if (state.mode === 'response' && state.state === 'status-line') {
+                        // If document starts with "Redirects", enter redirect preamble mode
+                        if (stream.match(/^Redirects$/)) {
+                            state.state = 'redirect';
+                            return 'meta';
+                        }
                         if (stream.match(/^HTTP\/[\d.]+/)) {
                             state.state = 'headers';
                             stream.skipToEnd();
                             return null;
+                        }
+                    }
+
+                    // Redirect preamble lines (-> <code> <method>: <url>)
+                    if (state.mode === 'response' && state.state === 'redirect') {
+                        if (stream.match(/^HTTP\/[\d.]+/)) {
+                            state.state = 'headers';
+                            stream.skipToEnd();
+                            return null;
+                        }
+                        if (stream.match(/^->/)) {
+                            stream.skipToEnd();
+                            return 'meta';
                         }
                     }
 
