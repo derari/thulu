@@ -229,14 +229,16 @@ function isBasicAuthWithCredentials(headerValue: string): boolean {
     }
 
     const credentials = trimmed.substring(6).trim();
-    return credentials.includes(':');
+    return credentials.includes(':') || credentials.includes(' ');
 }
 
 function encodeBasicAuthValue(headerValue: string): string {
     const trimmed = headerValue.trim();
     const basicPrefix = trimmed.substring(0, 6);
-    const credentials = trimmed.substring(6).trim();
-
+    let credentials = trimmed.substring(6).trim();
+    if (!credentials.includes(':')) {
+        credentials = credentials.replace(' ', ':');
+    }
     const encoded = btoa(credentials);
     return `${basicPrefix}${encoded}`;
 }
