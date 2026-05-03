@@ -209,7 +209,7 @@ function makeSingleHttpRequest(options: {
             });
 
             res.on('end', () => {
-                const body = Buffer.concat(chunks).toString('utf-8');
+                const body = Buffer.concat(chunks).toString('base64');
                 const headers: Record<string, string> = {};
 
                 if (res.headers) {
@@ -339,6 +339,10 @@ app.once('ready', function handleIPCReady() {
     });
     ipcMain.handle('system:showInFileSystem', async function handleShowInFileSystem(event, path: string) {
         await shell.openPath(path);
+        return { success: true };
+    });
+    ipcMain.handle('system:openFile', async function handleOpenFile(event, filePath: string) {
+        await shell.openPath(filePath);
         return { success: true };
     });
     ipcMain.handle('system:openExternal', async function handleOpenExternal(event, url: string) {

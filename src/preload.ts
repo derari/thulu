@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showInFileSystem: async (path: string) => {
         return await ipcRenderer.invoke('system:showInFileSystem', path);
     },
+    openFile: async (filePath: string) => {
+        return await ipcRenderer.invoke('system:openFile', filePath);
+    },
     openExternal: async (url: string) => {
         return await ipcRenderer.invoke('system:openExternal', url);
     },

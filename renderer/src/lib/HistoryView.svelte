@@ -14,7 +14,7 @@
     onMount(async () => {
         try {
             const raw = await window.electronAPI.listHistory(collectionPath);
-            entries = raw as HistoryMeta[];
+            entries = raw as unknown as HistoryMeta[];
         } catch (e) {
             error = e instanceof Error ? e.message : String(e);
         } finally {
@@ -65,24 +65,46 @@
     async function selectEntry(entry: HistoryMeta) {
         const basePath = `${collectionPath}/.thulu/responses/${entry.id}`;
 
-        let responseBody = '';
+        const responseIsBinary = entry.responseBodyEncoding === 'base64';
+        const showResponseWidget = entry.responseBodyFile &&
+            (responseIsBinary || (entry.responseBodySize ?? 0) > 1_048_576);
+
+        let responseBodyBytes = '';
+        let responseBodyFilePath: string | undefined;
+        let responseBodySize: number | undefined;
+
         if (entry.responseBodyFile) {
-            if (entry.responseBodyEncoding === 'base64') {
-                responseBody = (await window.electronAPI.readFileBinary(`${basePath}/${entry.responseBodyFile}`)) ?? '';
-            } else {
-                responseBody = (await window.electronAPI.readFile(`${basePath}/${entry.responseBodyFile}`)) ?? '';
+            responseBodyFilePath = `${basePath}/${entry.responseBodyFile}`;
+            responseBodySize = entry.responseBodySize;
+            if (!showResponseWidget) {
+                if (entry.responseBodyEncoding === 'base64') {
+                    // binary body is not needed
+                    responseBodyBytes = '';
+                } else {
+                    // UTF-8 text — re-encode to base64 bytes
+                    const text = (await window.electronAPI.readFile(`${basePath}/${entry.responseBodyFile}`)) ?? '';
+                    responseBodyBytes = btoa(unescape(encodeURIComponent(text)));
+                }
             }
         }
 
         let requestBody: string | undefined;
+        let requestBodyFilePath: string | undefined;
+        let requestBodySize: number | undefined;
+
         if (entry.requestBodyFile) {
-            requestBody = (await window.electronAPI.readFile(`${basePath}/${entry.requestBodyFile}`)) ?? undefined;
+            requestBodyFilePath = `${basePath}/${entry.requestBodyFile}`;
+            requestBodySize = entry.requestBodySize;
+            const reqIsBig = (entry.requestBodySize ?? 0) > 1_048_576;
+            if (!reqIsBig) {
+                requestBody = (await window.electronAPI.readFile(`${basePath}/${entry.requestBodyFile}`)) ?? undefined;
+            }
         }
 
         httpResponse.setResponse({
             statusLine: entry.statusLine,
             headers: entry.responseHeaders,
-            body: responseBody,
+            bodyBytes: responseBodyBytes,
             timeMs: entry.timeMs,
             redirects: entry.redirects,
             resolvedRequest: {
@@ -90,7 +112,11 @@
                 url: entry.url,
                 headers: entry.requestHeaders,
                 body: requestBody
-            }
+            },
+            responseBodyFilePath,
+            responseBodySize,
+            requestBodyFilePath,
+            requestBodySize,
         });
 
         onSelect();

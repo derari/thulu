@@ -21,7 +21,10 @@ export interface ResolvedRequest {
 export interface HttpRequestResponse {
     statusLine: string;
     headers: Record<string, string>;
+    /** Decoded text body for display */
     body: string;
+    /** Base64-encoded raw response bytes */
+    bodyBytes: string;
     timeMs: number;
     scriptResults?: ScriptExecutionResult[];
     redirects?: { status: number; method: string; url: string }[];
@@ -122,7 +125,7 @@ function substituteVariablesRecursive(
             return match;
         }
         visited.add(key);
-        const value = substituteVariablesRecursive(variables[key], variables, visited);
+        const value = substituteVariablesRecursive('' + variables[key], variables, visited);
         visited.delete(key);
         return value;
     });
@@ -269,6 +272,24 @@ function getOptionValue(
     return undefined;
 }
 
+function decodeResponseBody(base64Body: string, headers: Record<string, string>): string {
+    const contentType = headers['content-type'] || '';
+    const charsetMatch = contentType.match(/charset=([^\s;]+)/i);
+    const charset = charsetMatch ? charsetMatch[1] : 'utf-8';
+
+    const binaryString = atob(base64Body);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    try {
+        return new TextDecoder(charset).decode(bytes);
+    } catch {
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+}
+
 function evaluateFlag(optionValue: string | undefined): boolean {
     if (optionValue === undefined) {
         return false;
@@ -354,19 +375,21 @@ export async function executeHttpRequest(
         console.log('Response received:', response.status, response.statusText);
 
         const statusLine = `HTTP/1.1 ${response.status} ${response.statusText}`;
+        const decodedBody = decodeResponseBody(response.body, response.headers);
 
         const scriptResults = await executePostScripts(
             parsedFile.lines,
             section.postScripts,
             collectionPath,
-            response.body,
+            decodedBody,
             response.headers
         );
 
         return {
             statusLine,
             headers: response.headers,
-            body: response.body,
+            body: decodedBody,
+            bodyBytes: response.body,
             timeMs,
             scriptResults,
             redirects:
@@ -384,6 +407,7 @@ export async function executeHttpRequest(
             statusLine: 'Error',
             headers: {},
             body: error instanceof Error ? error.message : String(error),
+            bodyBytes: '',
             timeMs,
             resolvedRequest
         };

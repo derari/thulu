@@ -15,6 +15,8 @@
         setFormatStateEffect,
         setFormatToggleCallback
     } from './editor/responseFormatGutter.js';
+    import {createBodyLinkExtension} from './editor/bodyLinkWidget.js';
+    import {isBinaryContentType} from './editor/contentTypeUtils.js';
     import HistoryView from './HistoryView.svelte';
 
     export let orientation: 'horizontal' | 'vertical' = 'vertical';
@@ -40,6 +42,8 @@
     var rawBody: string = '';
     var contentType: string = '';
     var previousResponseId: string | null = null;
+    var responseBodyLink = createBodyLinkExtension();
+    var requestBodyLink = createBodyLinkExtension();
 
     function calculateResponseStructure(response: typeof $httpResponse) {
         if (!response) {
@@ -118,6 +122,7 @@
                 httpSyntaxHighlighting,
                 httpEditorTheme,
                 requestHttpBodyBg.plugin,
+                requestBodyLink.plugin,
                 EditorView.lineWrapping,
                 EditorView.editable.of(false),
                 EditorState.readOnly.of(true)
@@ -134,6 +139,7 @@
         if (!requestEditor) return;
 
         if (!response?.resolvedRequest) {
+            requestBodyLink.setState(null, requestEditor);
             requestEditor.dispatch({
                 changes: {from: 0, to: requestEditor.state.doc.length, insert: ''}
             });
@@ -141,14 +147,22 @@
         }
 
         const req = response.resolvedRequest;
+        const reqContentType = req.headers['content-type'] || req.headers['Content-Type'] || null;
+        const reqBodySize = req.body ? new TextEncoder().encode(req.body).length : 0;
+        const reqIsBinary = isBinaryContentType(reqContentType);
+        const showReqWidget = requestBodyLink.shouldShowWidget(reqIsBinary, reqBodySize);
+
         const lines: string[] = [];
         lines.push(`${req.method} ${req.url}`);
         for (const [key, value] of Object.entries(req.headers)) {
             lines.push(`${key}: ${value}`);
         }
         lines.push('');
-        if (req.body) {
+        const bodyStartLine = lines.length + 1; // 1-based, after the empty line
+        if (req.body && !showReqWidget) {
             lines.push(req.body);
+        } else if (showReqWidget) {
+            lines.push(''); // placeholder line for the widget
         }
         const text = lines.join('\n');
 
@@ -156,6 +170,18 @@
             changes: {from: 0, to: requestEditor.state.doc.length, insert: text},
             effects: EditorView.scrollIntoView(0, {y: 'start'})
         });
+
+        if (showReqWidget && req.body && response.requestBodyFilePath) {
+            requestBodyLink.setState({
+                bodyStartLine,
+                bodyEndLine: lines.length + 1,
+                filePath: response.requestBodyFilePath,
+                byteSize: response.requestBodySize ?? reqBodySize,
+                showWidget: true
+            }, requestEditor);
+        } else {
+            requestBodyLink.setState(null, requestEditor);
+        }
     }
 
     function createEditor() {
@@ -192,6 +218,7 @@
                 httpStatusCodeHighlighting,
                 httpEditorTheme,
                 httpBodyBg.plugin,
+                responseBodyLink.plugin,
                 EditorView.lineWrapping,
                 EditorView.editable.of(false),
                 EditorState.readOnly.of(true)
@@ -231,9 +258,20 @@
         const isNewResponse = previousResponseId !== currentResponseId;
         previousResponseId = currentResponseId;
 
-        rawBody = response.body;
         contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
+        const charsetMatch = contentType.match(/charset=([^\s;]+)/i);
+        const charset = charsetMatch ? charsetMatch[1] : 'utf-8';
+        const bytes = Uint8Array.from(atob(response.bodyBytes), c => c.charCodeAt(0));
+        try {
+            rawBody = new TextDecoder(charset).decode(bytes);
+        } catch {
+            rawBody = new TextDecoder('utf-8').decode(bytes);
+        }
         const canFormat = canFormatContentType(contentType);
+
+        const responseIsBinary = isBinaryContentType(contentType || null);
+        const responseBodySize = response.responseBodySize ?? (response.bodyBytes ? atob(response.bodyBytes).length : new TextEncoder().encode(rawBody).length);
+        const showResponseWidget = responseBodyLink.shouldShowWidget(responseIsBinary, responseBodySize);
 
         const lines: string[] = [];
 
@@ -252,11 +290,15 @@
             lines.push(`${key}: ${value}`);
         }
 
-        if (rawBody) {
+        if (rawBody || showResponseWidget) {
             lines.push('');
 
-            const bodyToUse = (isFormatted && canFormat) ? formatBody(rawBody, contentType) : rawBody;
-            lines.push(bodyToUse);
+            if (showResponseWidget) {
+                lines.push(''); // placeholder line; the widget replaces it visually
+            } else {
+                const bodyToUse = (isFormatted && canFormat) ? formatBody(rawBody, contentType) : rawBody;
+                lines.push(bodyToUse);
+            }
         }
 
         const text = lines.join('\n');
@@ -276,6 +318,19 @@
                 canFormat: canFormat
             })
         });
+
+        // Update body link widget state
+        if (showResponseWidget && response.responseBodyFilePath) {
+            responseBodyLink.setState({
+                bodyStartLine,
+                bodyEndLine: lines.length + 1,
+                filePath: response.responseBodyFilePath,
+                byteSize: responseBodySize,
+                showWidget: true
+            }, editor);
+        } else {
+            responseBodyLink.setState(null, editor);
+        }
 
         // Scroll to top if this is a new response
         if (isNewResponse) {

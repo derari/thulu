@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import {app} from "electron";
+import {getExtensionForContentType, isBinaryContentType} from './contentTypeUtils.js';
 
 const preferencesFileName = 'preferences.json';
 
@@ -193,18 +194,51 @@ export interface SaveHistoryParams {
     redirects?: { status: number; method: string; url: string }[];
 }
 
-function isTextContentType(headers: Record<string, string>): boolean {
-    const ct = headers['content-type'] || headers['Content-Type'] || '';
-    const lowerCt = ct.toLowerCase();
-    return (
-        lowerCt.includes('text/') ||
-        lowerCt.includes('json') ||
-        lowerCt.includes('xml') ||
-        lowerCt.includes('html') ||
-        lowerCt.includes('javascript') ||
-        lowerCt.includes('x-www-form-urlencoded') ||
-        lowerCt === ''
-    );
+function getContentTypeHeader(headers: Record<string, string>): string | null {
+    return headers['content-type'] || headers['Content-Type'] || null;
+}
+
+/** Reserved filenames that must not be overwritten in the entry directory */
+const RESERVED_NAMES = new Set(['meta.json']);
+
+export function parseContentDispositionFilename(headers: Record<string, string>): string | null {
+    const cd = headers['content-disposition'] || headers['Content-Disposition'] || '';
+    if (!cd) return null;
+
+    // Prefer RFC 5987 filename* over filename
+    const rfc5987Match = cd.match(/filename\*\s*=\s*([^']*)'[^']*'([^;,\s]+)/i);
+    if (rfc5987Match) {
+        try {
+            return decodeURIComponent(rfc5987Match[2]);
+        } catch {
+            // fall through
+        }
+    }
+
+    const plainMatch = cd.match(/filename\s*=\s*(?:"([^"\\]*)"|([^;,\s]+))/i);
+    if (plainMatch) {
+        return plainMatch[1] ?? plainMatch[2] ?? null;
+    }
+
+    return null;
+}
+
+export function sanitizeBodyFileName(raw: string, fallback: string): string {
+    // Strip directory separators and null bytes — keep only the basename
+    let name = raw.replace(/[/\\]/g, '').replace(/\x00/g, '').trim();
+
+    // Strip leading dots (avoid hidden/system files like ".htaccess")
+    name = name.replace(/^\.+/, '');
+
+    if (!name) return fallback;
+
+    // Must not collide with reserved entry-directory files
+    if (RESERVED_NAMES.has(name.toLowerCase())) return fallback;
+
+    // Must not start with "request-body" (reserved prefix)
+    if (name.toLowerCase().startsWith('request-body')) return fallback;
+
+    return name;
 }
 
 function safeFolderSegment(value: string, maxLen = 40): string {
@@ -242,7 +276,7 @@ export function listHistoryEntries(collectionPath: string, limit = 200): Array<R
     return entries.slice(0, limit).map(e => ({ ...e.meta, id: e.id }));
 }
 
-export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean; error?: string } {
+export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean; error?: string; entryPath?: string; responseBodyFile?: string; requestBodyFile?: string } {
     try {
         const {
             collectionPath, timestamp, requestFile, sectionName,
@@ -260,24 +294,36 @@ export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean;
         const entryDir = path.join(collectionPath, '.thulu', 'responses', folderName);
         fs.mkdirSync(entryDir, { recursive: true });
 
-        // Determine body encoding and write body files
-        const responseIsText = isTextContentType(responseHeaders);
+        // Determine body encoding and write body files using content-type for extension
+        const responseContentType = getContentTypeHeader(responseHeaders);
+        const responseIsBinary = isBinaryContentType(responseContentType);
+        const responseExt = getExtensionForContentType(responseContentType);
         let responseBodyFile: string | undefined;
         let responseBodyEncoding: 'utf8' | 'base64' | undefined;
+        let responseBodySize: number | undefined;
 
         if (responseBody !== undefined && responseBody !== null && responseBody !== '') {
-            responseBodyFile = 'response-body.bin';
-            responseBodyEncoding = responseIsText ? 'utf8' : 'base64';
-            fs.writeFileSync(path.join(entryDir, responseBodyFile), responseBody, responseIsText ? 'utf-8' : 'base64');
+            const defaultName = `response-body${responseExt}`;
+            const dispositionName = parseContentDispositionFilename(responseHeaders);
+            responseBodyFile = dispositionName
+                ? sanitizeBodyFileName(dispositionName, defaultName)
+                : defaultName;
+            responseBodyEncoding = responseIsBinary ? 'base64' : 'utf8';
+            const responseBuffer = Buffer.from(responseBody, 'base64');
+            fs.writeFileSync(path.join(entryDir, responseBodyFile), responseBuffer);
+            responseBodySize = responseBuffer.length;
         }
 
+        const requestContentType = getContentTypeHeader(requestHeaders);
+        const requestExt = getExtensionForContentType(requestContentType);
         let requestBodyFile: string | undefined;
-        let requestBodyEncoding: 'utf8' | 'base64' | undefined;
+        let requestBodySize: number | undefined;
 
         if (requestBody !== undefined && requestBody !== null && requestBody !== '') {
-            requestBodyFile = 'request-body.bin';
-            requestBodyEncoding = 'utf8';
-            fs.writeFileSync(path.join(entryDir, requestBodyFile), requestBody, 'utf-8');
+            requestBodyFile = `request-body${requestExt}`;
+            const requestBuffer = Buffer.from(requestBody, 'utf-8');
+            fs.writeFileSync(path.join(entryDir, requestBodyFile), requestBuffer);
+            requestBodySize = requestBuffer.length;
         }
 
         const meta = {
@@ -288,19 +334,20 @@ export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean;
             url,
             requestHeaders,
             requestBodyFile,
-            requestBodyEncoding,
+            requestBodySize,
             statusCode,
             statusLine,
             responseHeaders,
             responseBodyFile,
             responseBodyEncoding,
+            responseBodySize,
             timeMs,
             redirects
         };
 
         fs.writeFileSync(path.join(entryDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
 
-        return { success: true };
+        return { success: true, entryPath: entryDir, responseBodyFile, requestBodyFile };
     } catch (error) {
         console.error('Error saving history entry:', error);
         return { success: false, error: String(error) };

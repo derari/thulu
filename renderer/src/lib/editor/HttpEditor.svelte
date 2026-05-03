@@ -189,7 +189,7 @@
 
             httpResponse.setResponse(response);
 
-            // Fire-and-forget: save to history
+            // Save to history and attach file paths back to the response for the body link widget
             const section = parsed.sections.find(
                 s => sectionLineNumber >= s.startLineNumber && sectionLineNumber < s.endLineNumber
             );
@@ -210,16 +210,35 @@
                 statusCode,
                 statusLine: response.statusLine,
                 responseHeaders: response.headers,
-                responseBody: response.body,
+                responseBody: response.bodyBytes,
                 timeMs: response.timeMs,
                 redirects: response.redirects
+            }).then(result => {
+                if (result.entryPath) {
+                    // Use the actual filenames returned by the save (may differ from content-type default
+                    // when Content-Disposition provided a custom name)
+                    httpResponse.patchFilePaths({
+                        responseBodyFilePath: result.responseBodyFile
+                            ? `${result.entryPath}/${result.responseBodyFile}`
+                            : undefined,
+                        responseBodySize: response.bodyBytes
+                            ? atob(response.bodyBytes).length
+                            : undefined,
+                        requestBodyFilePath: result.requestBodyFile
+                            ? `${result.entryPath}/${result.requestBodyFile}`
+                            : undefined,
+                        requestBodySize: response.resolvedRequest?.body
+                            ? new TextEncoder().encode(response.resolvedRequest.body).length
+                            : undefined,
+                    });
+                }
             }).catch(err => console.error('Failed to save history entry:', err));
         } catch (error) {
             console.error('Request execution failed:', error);
             httpResponse.setResponse({
                 statusLine: 'Error',
                 headers: {},
-                body: error instanceof Error ? error.message : String(error),
+                bodyBytes: btoa(error instanceof Error ? error.message : String(error)),
                 timeMs: 0
             });
         }

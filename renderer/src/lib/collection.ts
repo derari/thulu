@@ -87,12 +87,13 @@ export interface HistoryMeta {
 	url: string;
 	requestHeaders: Record<string, string>;
 	requestBodyFile?: string;    // 'request-body.bin' if present
-	requestBodyEncoding?: 'utf8' | 'base64';
+	requestBodySize?: number;    // on-disk file size in bytes
 	statusCode: number;
 	statusLine: string;
 	responseHeaders: Record<string, string>;
 	responseBodyFile?: string;   // 'response-body.bin' if present
 	responseBodyEncoding?: 'utf8' | 'base64';
+	responseBodySize?: number;   // on-disk file size in bytes
 	timeMs: number;
 	redirects?: { status: number; method: string; url: string }[];
 }

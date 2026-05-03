@@ -43,6 +43,7 @@ declare global {
             createFile: (filePath: string, content: string) => Promise<{ success: boolean, error?: string }>;
             updateCollectionName: (collectionPath: string, newName: string) => Promise<{ success: boolean, error?: string }>;
             showInFileSystem: (path: string) => Promise<{ success: boolean }>;
+            openFile: (filePath: string) => Promise<{ success: boolean }>;
             httpRequest: (options: {
                 url: string,
                 method: string,
@@ -55,6 +56,7 @@ declare global {
                 status: number,
                 statusText: string,
                 headers: Record<string, string>,
+                /** Base64-encoded response body bytes */
                 body: string,
                 redirects: { status: number, method: string, url: string }[]
             }>;
@@ -89,7 +91,7 @@ declare global {
                 responseBody?: string;
                 timeMs: number;
                 redirects?: { status: number; method: string; url: string }[];
-            }) => Promise<{ success: boolean; error?: string }>;
+            }) => Promise<{ success: boolean; error?: string; entryPath?: string; responseBodyFile?: string; requestBodyFile?: string }>;
             listHistory: (collectionPath: string) => Promise<Array<Record<string, unknown>>>;
         };
     }
