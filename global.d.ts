@@ -34,6 +34,7 @@ declare global {
         electronAPI: {
             listDirectory: (dirPath: string) => Promise<Array<{ name: string, isDirectory: boolean, isFile: boolean }>>;
             readFile: (filePath: string) => Promise<string | null>;
+            readFileBinary: (filePath: string) => Promise<string | null>;
             writeFile: (filePath: string, content: string) => Promise<{ success: boolean, error?: string }>;
             fileExists: (filePath: string) => Promise<boolean>;
             deletePath: (filePath: string) => Promise<{ success: boolean, error?: string }>;
@@ -73,6 +74,23 @@ declare global {
             onPreferencesLoad: (callback: (preferences: Preferences) => void) => void;
             requestPreferences: () => void;
             savePreferences: (preferences: Preferences) => void;
+            saveHistory: (params: {
+                collectionPath: string;
+                timestamp: string;
+                requestFile: string;
+                sectionName: string;
+                verb: string;
+                url: string;
+                requestHeaders: Record<string, string>;
+                requestBody?: string;
+                statusCode: number;
+                statusLine: string;
+                responseHeaders: Record<string, string>;
+                responseBody?: string;
+                timeMs: number;
+                redirects?: { status: number; method: string; url: string }[];
+            }) => Promise<{ success: boolean; error?: string }>;
+            listHistory: (collectionPath: string) => Promise<Array<Record<string, unknown>>>;
         };
     }
 

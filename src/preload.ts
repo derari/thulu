@@ -78,6 +78,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }) => {
         return await ipcRenderer.invoke('script:execute', params);
     },
+    saveHistory: async (params: {
+        collectionPath: string;
+        timestamp: string;
+        requestFile: string;
+        sectionName: string;
+        verb: string;
+        url: string;
+        requestHeaders: Record<string, string>;
+        requestBody?: string;
+        statusCode: number;
+        statusLine: string;
+        responseHeaders: Record<string, string>;
+        responseBody?: string;
+        timeMs: number;
+        redirects?: { status: number; method: string; url: string }[];
+    }) => {
+        return await ipcRenderer.invoke('history:save', params);
+    },
+    listHistory: async (collectionPath: string) => {
+        return await ipcRenderer.invoke('history:list', collectionPath);
+    },
     onPreferencesOpen: (callback: () => void) => {
         preferencesOpenCallbacks.push(callback);
         return () => {

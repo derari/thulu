@@ -176,3 +176,133 @@ export function updateCollectionName(collectionPath: string, newName: string): {
     }
 }
 
+export interface SaveHistoryParams {
+    collectionPath: string;
+    timestamp: string;
+    requestFile: string;
+    sectionName: string;
+    verb: string;
+    url: string;
+    requestHeaders: Record<string, string>;
+    requestBody?: string;
+    statusCode: number;
+    statusLine: string;
+    responseHeaders: Record<string, string>;
+    responseBody?: string;
+    timeMs: number;
+    redirects?: { status: number; method: string; url: string }[];
+}
+
+function isTextContentType(headers: Record<string, string>): boolean {
+    const ct = headers['content-type'] || headers['Content-Type'] || '';
+    const lowerCt = ct.toLowerCase();
+    return (
+        lowerCt.includes('text/') ||
+        lowerCt.includes('json') ||
+        lowerCt.includes('xml') ||
+        lowerCt.includes('html') ||
+        lowerCt.includes('javascript') ||
+        lowerCt.includes('x-www-form-urlencoded') ||
+        lowerCt === ''
+    );
+}
+
+function safeFolderSegment(value: string, maxLen = 40): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').substring(0, maxLen);
+}
+
+export function listHistoryEntries(collectionPath: string, limit = 200): Array<Record<string, unknown>> {
+    const responsesDir = path.join(collectionPath, '.thulu', 'responses');
+    if (!fs.existsSync(responsesDir)) {
+        return [];
+    }
+
+    const entries: Array<{ id: string; timestamp: string; meta: Record<string, unknown> }> = [];
+
+    let dirs: string[];
+    try {
+        dirs = fs.readdirSync(responsesDir);
+    } catch {
+        return [];
+    }
+
+    for (const dir of dirs) {
+        const metaPath = path.join(responsesDir, dir, 'meta.json');
+        if (!fs.existsSync(metaPath)) continue;
+        try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            entries.push({ id: dir, timestamp: meta.timestamp ?? '', meta });
+        } catch {
+            // skip corrupt entries
+        }
+    }
+
+    entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    return entries.slice(0, limit).map(e => ({ ...e.meta, id: e.id }));
+}
+
+export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean; error?: string } {
+    try {
+        const {
+            collectionPath, timestamp, requestFile, sectionName,
+            verb, url, requestHeaders, requestBody,
+            statusCode, statusLine, responseHeaders, responseBody,
+            timeMs, redirects
+        } = params;
+
+        // Build a human-readable folder name: 2026-05-03T14-22-01_GET_api-users_200
+        const safeTimestamp = timestamp.replace(/:/g, '-').replace(/\.\d+Z$/, 'Z').replace('Z', '');
+        const safeVerb = safeFolderSegment(verb, 10);
+        const safeUrl = safeFolderSegment(url.replace(/^https?:\/\/[^/]+/, ''), 40);
+        const folderName = `${safeTimestamp}_${safeVerb}_${safeUrl}_${statusCode}`;
+
+        const entryDir = path.join(collectionPath, '.thulu', 'responses', folderName);
+        fs.mkdirSync(entryDir, { recursive: true });
+
+        // Determine body encoding and write body files
+        const responseIsText = isTextContentType(responseHeaders);
+        let responseBodyFile: string | undefined;
+        let responseBodyEncoding: 'utf8' | 'base64' | undefined;
+
+        if (responseBody !== undefined && responseBody !== null && responseBody !== '') {
+            responseBodyFile = 'response-body.bin';
+            responseBodyEncoding = responseIsText ? 'utf8' : 'base64';
+            fs.writeFileSync(path.join(entryDir, responseBodyFile), responseBody, responseIsText ? 'utf-8' : 'base64');
+        }
+
+        let requestBodyFile: string | undefined;
+        let requestBodyEncoding: 'utf8' | 'base64' | undefined;
+
+        if (requestBody !== undefined && requestBody !== null && requestBody !== '') {
+            requestBodyFile = 'request-body.bin';
+            requestBodyEncoding = 'utf8';
+            fs.writeFileSync(path.join(entryDir, requestBodyFile), requestBody, 'utf-8');
+        }
+
+        const meta = {
+            timestamp,
+            requestFile,
+            sectionName,
+            verb,
+            url,
+            requestHeaders,
+            requestBodyFile,
+            requestBodyEncoding,
+            statusCode,
+            statusLine,
+            responseHeaders,
+            responseBodyFile,
+            responseBodyEncoding,
+            timeMs,
+            redirects
+        };
+
+        fs.writeFileSync(path.join(entryDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error saving history entry:', error);
+        return { success: false, error: String(error) };
+    }
+}

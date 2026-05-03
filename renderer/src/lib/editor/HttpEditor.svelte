@@ -15,10 +15,7 @@
     import {currentCollection} from '../stores/currentCollection.js';
     import {globalVariables} from '../stores/globalVariables.js';
     import {isDarkMode} from '../stores/theme.js';
-    import {
-        type AvailableEnvironment,
-        listAvailableEnvironments
-    } from '../environmentParser.js';
+    import {type AvailableEnvironment, listAvailableEnvironments} from '../environmentParser.js';
     import {executeHttpRequest} from './httpRequestExecutor.js';
 
     export let content: string = '';
@@ -191,6 +188,32 @@
             }
 
             httpResponse.setResponse(response);
+
+            // Fire-and-forget: save to history
+            const section = parsed.sections.find(
+                s => sectionLineNumber >= s.startLineNumber && sectionLineNumber < s.endLineNumber
+            );
+            const relativeFile = filePath.startsWith(collectionPath)
+                ? filePath.substring(collectionPath.length).replace(/^[\\/]/, '')
+                : filePath;
+            const statusCodeMatch = response.statusLine.match(/\s(\d+)\s/);
+            const statusCode = statusCodeMatch ? parseInt(statusCodeMatch[1], 10) : 0;
+            window.electronAPI.saveHistory({
+                collectionPath,
+                timestamp: new Date().toISOString(),
+                requestFile: relativeFile,
+                sectionName: section?.name ?? '',
+                verb: response.resolvedRequest?.method ?? '',
+                url: response.resolvedRequest?.url ?? '',
+                requestHeaders: response.resolvedRequest?.headers ?? {},
+                requestBody: response.resolvedRequest?.body,
+                statusCode,
+                statusLine: response.statusLine,
+                responseHeaders: response.headers,
+                responseBody: response.body,
+                timeMs: response.timeMs,
+                redirects: response.redirects
+            }).catch(err => console.error('Failed to save history entry:', err));
         } catch (error) {
             console.error('Request execution failed:', error);
             httpResponse.setResponse({

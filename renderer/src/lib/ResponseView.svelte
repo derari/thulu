@@ -3,6 +3,7 @@
     import {EditorView, lineNumbers} from '@codemirror/view';
     import {EditorState} from '@codemirror/state';
     import {httpResponse} from './stores/httpResponse.js';
+    import {currentCollection} from './stores/currentCollection.js';
     import {createHttpLanguage} from './editor/httpLanguage.js';
     import {parseHttpResponse} from './editor/httpParser.js';
     import {httpSyntaxHighlighting} from './editor/httpHighlighting.js';
@@ -14,10 +15,12 @@
         setFormatStateEffect,
         setFormatToggleCallback
     } from './editor/responseFormatGutter.js';
+    import HistoryView from './HistoryView.svelte';
 
     export let orientation: 'horizontal' | 'vertical' = 'vertical';
 
     var activeTab: 'response' | 'request' = 'response';
+    var showHistory: boolean = false;
     var size: number = 400;
     var isResizing = false;
     var startPos = 0;
@@ -379,21 +382,33 @@
 <div class="response-view" class:horizontal={orientation === 'horizontal'} class:vertical={orientation === 'vertical'}
      style={sizeStyle}>
     <div class="response-header">
-        <div class="tabs">
-            <button class="tab" class:active={activeTab === 'response'} on:click={() => activeTab = 'response'}>Response</button>
-            <button class="tab" class:active={activeTab === 'request'} on:click={() => activeTab = 'request'}>Request</button>
-        </div>
-        <span class="response-title">{headerTitle}</span>
+        {#if showHistory}
+            <button class="back-btn" on:click={() => showHistory = false}>← Back</button>
+            <span class="response-title">History</span>
+        {:else}
+            {#if $httpResponse}
+                <div class="tabs">
+                    <button class="tab" class:active={activeTab === 'response'} on:click={() => activeTab = 'response'}>Response</button>
+                    <button class="tab" class:active={activeTab === 'request'} on:click={() => activeTab = 'request'}>Request</button>
+                </div>
+                <span class="response-title">{headerTitle}</span>
+            {/if}
+        {/if}
+        {#if $currentCollection && !showHistory}
+            <button class="history-btn" on:click={() => showHistory = true}>History</button>
+        {/if}
     </div>
     <div class="response-content">
-        <div bind:this={editorElement} class="editor-container" class:hidden={activeTab !== 'response'}></div>
-        <div bind:this={requestEditorElement} class="editor-container" class:hidden={activeTab !== 'request'}></div>
-        {#if !$httpResponse && activeTab === 'response'}
+        {#if showHistory && $currentCollection}
+            <HistoryView
+                collectionPath={$currentCollection.path}
+                onSelect={() => { showHistory = false; activeTab = 'response'; }}
+            />
+        {:else if !$httpResponse}
             <p class="no-response">No response yet</p>
         {/if}
-        {#if !$httpResponse?.resolvedRequest && activeTab === 'request'}
-            <p class="no-response">No request yet</p>
-        {/if}
+        <div bind:this={editorElement} class="editor-container" class:hidden={showHistory || !$httpResponse || activeTab !== 'response'}></div>
+        <div bind:this={requestEditorElement} class="editor-container" class:hidden={showHistory || !$httpResponse || activeTab !== 'request'}></div>
     </div>
 </div>
 
@@ -452,6 +467,37 @@
         display: flex;
         align-items: center;
         gap: 1rem;
+    }
+
+    .history-btn {
+        margin-left: auto;
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        cursor: pointer;
+    }
+
+    .history-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover, var(--border-default));
+    }
+
+    .back-btn {
+        background: none;
+        border: none;
+        padding: 0.2rem 0.4rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--interactive-primary);
+        cursor: pointer;
+    }
+
+    .back-btn:hover {
+        opacity: 0.8;
     }
 
     .tabs {

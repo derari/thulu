@@ -77,3 +77,22 @@ export interface OpenFile {
 	content: string;
 	sectionLineNumber?: number;
 }
+
+export interface HistoryMeta {
+	id: string;              // folder name, used to construct body file paths
+	timestamp: string;           // ISO 8601
+	requestFile: string;         // relative path from collection root
+	sectionName: string;
+	verb: string;
+	url: string;
+	requestHeaders: Record<string, string>;
+	requestBodyFile?: string;    // 'request-body.bin' if present
+	requestBodyEncoding?: 'utf8' | 'base64';
+	statusCode: number;
+	statusLine: string;
+	responseHeaders: Record<string, string>;
+	responseBodyFile?: string;   // 'response-body.bin' if present
+	responseBodyEncoding?: 'utf8' | 'base64';
+	timeMs: number;
+	redirects?: { status: number; method: string; url: string }[];
+}

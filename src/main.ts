@@ -10,10 +10,13 @@ import {
     deletePath,
     fileExists,
     listDirectory,
+    listHistoryEntries,
     loadPreferences,
     readFile,
     readFileBinary,
     renamePath,
+    saveHistoryEntry,
+    type SaveHistoryParams,
     savePreferences,
     updateCollectionName,
     writeFile
@@ -361,5 +364,11 @@ app.once('ready', function handleIPCReady() {
     });
     ipcMain.handle('script:execute', function handleScriptExecute(event, params: ScriptExecutionParams) {
         return executeScript(params);
+    });
+    ipcMain.handle('history:save', function handleHistorySave(event, params: SaveHistoryParams) {
+        return saveHistoryEntry(params);
+    });
+    ipcMain.handle('history:list', function handleHistoryList(event, collectionPath: string) {
+        return listHistoryEntries(collectionPath);
     });
 });
