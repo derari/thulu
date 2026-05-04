@@ -2,7 +2,7 @@
     import {onMount} from 'svelte';
     import type {HistoryMeta} from './collection.js';
     import {httpResponse} from './stores/httpResponse.js';
-    import {getStatusColor, getVerbColor} from './editor/httpColors.js';
+    import {formatVerb, getStatusColor, getVerbColor} from './editor/httpColors.js';
 
     export let collectionPath: string;
     export let onSelect: () => void;
@@ -137,7 +137,7 @@
                 <button class="entry" on:click={() => selectEntry(entry)}>
                     <span class="time">{formatTime(entry.timestamp)}</span>
                     <span class="section">{entry.sectionName || entry.requestFile}</span>
-                    <span class="verb" style="color: {getVerbColor(entry.verb)}">{entry.verb}</span>
+                    <span class="verb" style="color: {getVerbColor(entry.verb)}">{formatVerb(entry.verb)}</span>
                     <span class="url" title={entry.url}>{entry.url}</span>
                     <span class="status" style="color: {getStatusColor(entry.statusCode)}">{entry.statusCode}</span>
                     <span class="duration">{entry.timeMs}ms</span>

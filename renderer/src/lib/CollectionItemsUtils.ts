@@ -1,5 +1,7 @@
 import type { CollectionItem, EnvironmentConfig, HttpSection } from './collection';
 
+export { getVerbColor, formatVerb } from './editor/httpColors.js';
+
 export interface DisplayItem {
     item: CollectionItem;
     indent: number;
@@ -12,32 +14,6 @@ export interface DisplayItem {
     fileKey?: string;
     isEnvironment: boolean;
     environmentConfig?: EnvironmentConfig;
-}
-
-export function formatVerb(verb: string): string {
-    const upper = verb.toUpperCase();
-    if (upper === 'PATCH') return 'PTCH';
-    if (upper === 'DELETE') return 'DEL';
-    if (upper === 'OPTIONS') return 'OPT';
-    return upper.substring(0, 4);
-}
-
-export function getVerbColor(verb: string): string {
-    const upper = verb.toUpperCase();
-    switch (upper) {
-        case 'GET':
-            return 'var(--http-verb-get)';
-        case 'POST':
-            return 'var(--http-verb-post)';
-        case 'PUT':
-            return 'var(--http-verb-put)';
-        case 'PATCH':
-            return 'var(--http-verb-patch)';
-        case 'DELETE':
-            return 'var(--http-verb-delete)';
-        default:
-            return 'var(--http-verb-other)';
-    }
 }
 
 export function flattenCollection(
