@@ -135,12 +135,24 @@
             <div class="date-divider">{group.label}</div>
             {#each group.entries as entry}
                 <button class="entry" on:click={() => selectEntry(entry)}>
-                    <span class="time">{formatTime(entry.timestamp)}</span>
-                    <span class="section">{entry.sectionName || entry.requestFile}</span>
-                    <span class="verb" style="color: {getVerbColor(entry.verb)}">{formatVerb(entry.verb)}</span>
-                    <span class="url" title={entry.url}>{entry.url}</span>
-                    <span class="status" style="color: {getStatusColor(entry.statusCode)}">{entry.statusCode}</span>
-                    <span class="duration">{entry.timeMs}ms</span>
+                    <div class="entry-row entry-row-top">
+                        <span class="time">{formatTime(entry.timestamp)}</span>
+                        <span class="file">{entry.requestFile.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')}</span>
+                        {#if entry.sectionName}
+                            <span class="section-sep">›</span>
+                            <span class="section">{entry.sectionName}</span>
+                        {/if}
+                        {#if entry.environment}
+                            <span class="environment">{entry.environment}</span>
+                        {/if}
+                        <span class="duration">{entry.timeMs}ms</span>
+                    </div>
+                    <div class="entry-row entry-row-bottom">
+<!--                        <span class="time"></span>-->
+                        <span class="verb" style="color: {getVerbColor(entry.verb)}">{formatVerb(entry.verb)}</span>
+                        <span class="url" title={entry.url}>{entry.url}</span>
+                        <span class="status" style="color: {getStatusColor(entry.statusCode)}">{entry.statusCode}</span>
+                    </div>
                 </button>
             {/each}
         {/each}
@@ -182,10 +194,9 @@
     }
 
     .entry {
-        display: grid;
-        grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem minmax(0, 2fr) 2rem 3.5rem;
-        align-items: center;
-        gap: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
         padding: 0.35rem 0.75rem;
         background: none;
         border: none;
@@ -201,17 +212,53 @@
         background: var(--bg-hover, var(--border-default));
     }
 
+    .entry-row {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        min-width: 0;
+    }
+
+    .entry-row-top {
+        font-size: 0.8rem;
+    }
+
+    .entry-row-bottom {
+        font-size: 0.75rem;
+    }
+
     .time {
         color: var(--text-secondary);
         font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
+        width: 2.0rem;
+        /*text-align: right;*/
+        flex-shrink: 0;
     }
 
     .verb {
         font-weight: 700;
         font-size: 0.7rem;
         white-space: nowrap;
+        width: 2.0rem;
+        flex-shrink: 0;
+    }
+
+    .file {
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
+        min-width: 2rem;
+    }
+
+    .section-sep {
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        flex-shrink: 0;
     }
 
     .section {
@@ -219,6 +266,18 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .environment {
+        color: var(--text-secondary);
+        font-size: 0.7rem;
+        white-space: nowrap;
+        background: var(--bg-tertiary);
+        border-radius: 3px;
+        padding: 0 0.3rem;
+        flex-shrink: 0;
     }
 
     .url {
@@ -227,21 +286,27 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        flex: 1;
+        min-width: 0;
     }
 
     .status {
         font-weight: 700;
         font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
-        text-align: right;
+        margin-left: auto;
+        flex-shrink: 0;
     }
 
     .duration {
         color: var(--text-secondary);
         font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
-        text-align: right;
         white-space: nowrap;
+        width: 3.25rem;
+        text-align: right;
+        margin-left: auto;
+        flex-shrink: 0;
     }
 </style>
 

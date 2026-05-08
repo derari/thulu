@@ -26,6 +26,14 @@ export interface Theme {
 		danger: string;
 		dangerHover: string;
 	};
+	color: {
+		success: string;
+		warning: string;
+		error: string;
+		info: string;
+        highlight: string;
+        alternative: string;
+	};
 	state: {
 		success: string;
 		warning: string;
@@ -98,6 +106,14 @@ export const lightTheme: Theme = {
 		danger: '#cc0000',
 		dangerHover: '#990000'
 	},
+	color: {
+		success: '#00cc66',
+		warning: '#ff9900',
+		error: '#cc0000',
+		info: '#0066cc',
+        highlight: '#000000',
+        alternative: '#ffffff'
+	},
 	state: {
 		success: '#00cc66',
 		warning: '#ff9900',
@@ -145,73 +161,81 @@ export const lightTheme: Theme = {
 };
 
 export const darkTheme: Theme = {
-	background: {
-		primary: '#1e1e1e',
-		secondary: '#252525',
-		tertiary: '#2d2d2d'
-	},
-	text: {
-		primary: '#e0e0e0',
-		secondary: '#a0a0a0', //a0a0a0 or c0c0c0
-		tertiary: '#707070',
-		inverse: '#1e1e1e'
-	},
-	border: {
-		default: '#404040',
-		focus: '#4d9fff',
-		hover: '#606060'
-	},
-	interactive: {
-		primary: '#4d9fff',
-		primaryHover: '#6bb0ff',
-		primaryActive: '#89c1ff',
-		secondary: '#3a3a3a',
-		secondaryHover: '#4a4a4a',
-		danger: '#ff4d4d',
-		dangerHover: '#ff6b6b'
-	},
-	state: {
-		success: '#4dff99',
-		warning: '#ffb84d',
-		error: '#ff4d4d',
-		info: '#4d9fff'
-	},
-	sidebar: {
-		background: '#252525',
-		header: '#2d2d2d',
-		itemHover: '#3a3a3a',
-		itemActive: '#1a3a52'
-	},
-	editor: {
-		background: '#1e1e1e',
-		lineNumber: '#858585',
-		selection: '#1a3a52',
-		cursor: '#e0e0e0',
-		bodyBackground: '#262626'
-	},
-	code: {
-		plain: '#d4d4d4',
-		keyword: '#569cd6',
-		comment: '#6a9955',
-		string: '#ce9178',
-		literal: '#b5cea8',
-		highlight1: '#c586c0',
-		highlight2: '#f97583',
-		disabled: '#858585'
-	},
-	httpVerb: {
-		get: '#a78bfa',
-		post: '#4ade80',
-		put: '#fbbf24',
-		patch: '#fbbf24',
-		delete: '#f87171',
-		other: '#22d3ee'
-	},
-	httpStatus: {
-		info: '#a78bfa', // 1xx - purple (same as GET)
-		success: '#4ade80', // 2xx - green (same as POST)
-		redirect: '#22d3ee', // 3xx - cyan (same as other)
-		clientError: '#fbbf24', // 4xx - yellow (same as PUT/PATCH)
-		serverError: '#f87171' // 5xx - red (same as DELETE)
-	}
+    background: {
+        primary: '#1e1e1e',
+        secondary: '#252525',
+        tertiary: '#2d2d2d'
+    },
+    text: {
+        primary: '#e0e0e0',
+        secondary: '#a0a0a0', //a0a0a0 or c0c0c0
+        tertiary: '#707070',
+        inverse: '#1e1e1e'
+    },
+    border: {
+        default: '#404040',
+        focus: '#4d9fff',
+        hover: '#606060'
+    },
+    interactive: {
+        primary: '#4d9fff',
+        primaryHover: '#6bb0ff',
+        primaryActive: '#89c1ff',
+        secondary: '#3a3a3a',
+        secondaryHover: '#4a4a4a',
+        danger: '#ff4d4d',
+        dangerHover: '#ff6b6b'
+    },
+    color: {
+        success: '#4ade80',
+        warning: '#fbbf24',
+        error: '#f87171',
+        info: '#0066cc',
+        highlight: '#22d3ee',
+        alternative: '#a78bfa'
+    },
+    state: {
+        success: '#4dff99',
+        warning: '#ffb84d',
+        error: '#ff4d4d',
+        info: '#4d9fff'
+    },
+    sidebar: {
+        background: '#252525',
+        header: '#2d2d2d',
+        itemHover: '#3a3a3a',
+        itemActive: '#1a3a52'
+    },
+    editor: {
+        background: '#1e1e1e',
+        lineNumber: '#858585',
+        selection: '#1a3a52',
+        cursor: '#e0e0e0',
+        bodyBackground: '#262626'
+    },
+    code: {
+        plain: '#d4d4d4',
+        keyword: '#569cd6',
+        comment: '#6a9955',
+        string: '#ce9178',
+        literal: '#b5cea8',
+        highlight1: '#c586c0',
+        highlight2: '#f97583',
+        disabled: '#858585'
+    },
+    httpVerb: {
+        get: '--color-alternative', // '#a78bfa',
+        post: '--color-success', // '#4ade80',
+        put: '--color-warning', // '#fbbf24',
+        patch: '--color-warning', // '#fbbf24',
+        delete: '--color-error', // '#f87171',
+        other: '--color-highlight' // '#22d3ee'
+    },
+    httpStatus: {
+        info: '--color-alternative', // 1xx - purple (same as GET)
+        success: '--color-success', // '#4ade80', // 2xx - green (same as POST)
+        redirect: '--color-highlight', // 3xx - cyan (same as other)
+        clientError: '--color-warning', // 4xx - yellow (same as PUT/PATCH)
+        serverError: '--color-error' // 5xx - red (same as DELETE)
+    }
 };

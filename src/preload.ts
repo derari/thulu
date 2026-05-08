@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         timestamp: string;
         requestFile: string;
         sectionName: string;
+        environment?: string;
         verb: string;
         url: string;
         requestHeaders: Record<string, string>;

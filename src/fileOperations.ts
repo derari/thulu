@@ -182,6 +182,7 @@ export interface SaveHistoryParams {
     timestamp: string;
     requestFile: string;
     sectionName: string;
+    environment?: string;
     verb: string;
     url: string;
     requestHeaders: Record<string, string>;
@@ -279,7 +280,7 @@ export function listHistoryEntries(collectionPath: string, limit = 200): Array<R
 export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean; error?: string; entryPath?: string; responseBodyFile?: string; requestBodyFile?: string } {
     try {
         const {
-            collectionPath, timestamp, requestFile, sectionName,
+            collectionPath, timestamp, requestFile, sectionName, environment,
             verb, url, requestHeaders, requestBody,
             statusCode, statusLine, responseHeaders, responseBody,
             timeMs, redirects
@@ -330,6 +331,7 @@ export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean;
             timestamp,
             requestFile,
             sectionName,
+            environment,
             verb,
             url,
             requestHeaders,

@@ -18,7 +18,7 @@
         const root = document.documentElement;
 
         Object.keys(obj).forEach(key => {
-            const value = obj[key];
+            let value = obj[key];
             const kebabKey = camelToKebab(key);
             const renamedKebabKey = kebabKey.replace(/\bbackground\b/g, 'bg');
             const cssVarName = prefix ? `${prefix}-${renamedKebabKey}` : renamedKebabKey;
@@ -28,6 +28,7 @@
                 return;
             }
 
+            if (`${value}`.startsWith('--')) value = `var(${value})`;
             root.style.setProperty(`--${cssVarName}`, value);
         });
     }

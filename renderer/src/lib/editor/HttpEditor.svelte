@@ -203,6 +203,7 @@
                 timestamp: new Date().toISOString(),
                 requestFile: relativeFile,
                 sectionName: section?.name ?? '',
+                environment: selectedEnvironment || undefined,
                 verb: response.resolvedRequest?.method ?? '',
                 url: response.resolvedRequest?.url ?? '',
                 requestHeaders: response.resolvedRequest?.headers ?? {},

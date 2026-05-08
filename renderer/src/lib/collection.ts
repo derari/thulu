@@ -83,6 +83,7 @@ export interface HistoryMeta {
 	timestamp: string;           // ISO 8601
 	requestFile: string;         // relative path from collection root
 	sectionName: string;
+	environment?: string;
 	verb: string;
 	url: string;
 	requestHeaders: Record<string, string>;

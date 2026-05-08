@@ -609,8 +609,8 @@ GET https://example.com
                                         <button
                                                 class="action-button info-button"
                                                 on:click={(e) => handleInfoClick(e, item.folderPath || '', item.title)}
-                                                title="Contains README"
-                                                aria-label="Contains README"
+                                                title="Show README"
+                                                aria-label="Show README"
                                         >
                                             <Info size={16}/>
                                         </button>

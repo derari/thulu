@@ -1,12 +1,12 @@
 <script lang="ts">
     import {onMount} from 'svelte';
-    import {currentCollectionName, hasCurrentCollection, currentCollection} from './stores/currentCollection.js';
+    import {currentCollection, currentCollectionName, hasCurrentCollection} from './stores/currentCollection.js';
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
     import CollectionItems from './CollectionItems.svelte';
     import NewItemModal from './NewItemModal.svelte';
     import RenameModal from './RenameModal.svelte';
-    import {MoreVertical, Info} from 'lucide-svelte';
+    import {Info, MoreVertical} from 'lucide-svelte';
     import ReadmeView from './ReadmeView.svelte';
 
     let width: number = 200;
@@ -203,8 +203,8 @@ GET https://example.com
                     <button
                             class="header-action-button info-button"
                             on:click={handleInfoClick}
-                            title="Collection has README"
-                            aria-label="Collection has README"
+                            title="Show README"
+                            aria-label="Show README"
                     >
                         <Info size={16}/>
                     </button>
