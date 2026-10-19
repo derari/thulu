@@ -7,17 +7,18 @@
 // Read more: https://www.electronjs.org/docs/latest/tutorial/tutorial-preload
 
 import {contextBridge, ipcRenderer} from 'electron';
+import type {HttpRequestOptions, SaveHistoryParams, ScriptExecutionParams} from './shared/ipc.js';
 
 // Global callback storage - support multiple subscribers
 const preferencesOpenCallbacks: Array<() => void> = [];
-const preferencesLoadCallbacks: Array<(preferences: { appearance: string }) => void> = [];
+const preferencesLoadCallbacks: Array<(preferences: Preferences) => void> = [];
 
 // Set up single listeners that call all registered callbacks
 ipcRenderer.on('preferences:open', () => {
     preferencesOpenCallbacks.forEach(callback => callback());
 });
 
-ipcRenderer.on('preferences:load', (event, preferences: { appearance: string }) => {
+ipcRenderer.on('preferences:load', (event, preferences: Preferences) => {
     preferencesLoadCallbacks.forEach(callback => callback(preferences));
 });
 
@@ -62,42 +63,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openExternal: async (url: string) => {
         return await ipcRenderer.invoke('system:openExternal', url);
     },
-    httpRequest: async (options: {
-        url: string;
-        method: string;
-        headers: Record<string, string>;
-        body?: string;
-        rejectUnauthorized?: boolean;
-        followRedirects?: boolean;
-    }) => {
+    httpRequest: async (options: HttpRequestOptions) => {
         return await ipcRenderer.invoke('http:request', options);
     },
-    executeScript: async (params: {
-        code: string;
-        timeout: number;
-        collectionPath?: string;
-        responseBody?: string;
-        responseContentType?: string;
-    }) => {
+    executeScript: async (params: ScriptExecutionParams) => {
         return await ipcRenderer.invoke('script:execute', params);
     },
-    saveHistory: async (params: {
-        collectionPath: string;
-        timestamp: string;
-        requestFile: string;
-        sectionName: string;
-        environment?: string;
-        verb: string;
-        url: string;
-        requestHeaders: Record<string, string>;
-        requestBody?: string;
-        statusCode: number;
-        statusLine: string;
-        responseHeaders: Record<string, string>;
-        responseBody?: string;
-        timeMs: number;
-        redirects?: { status: number; method: string; url: string }[];
-    }) => {
+    saveHistory: async (params: SaveHistoryParams) => {
         return await ipcRenderer.invoke('history:save', params);
     },
     listHistory: async (collectionPath: string) => {
@@ -112,7 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
             }
         };
     },
-    onPreferencesLoad: (callback: (preferences: { appearance: string }) => void) => {
+    onPreferencesLoad: (callback: (preferences: Preferences) => void) => {
         preferencesLoadCallbacks.push(callback);
         return () => {
             const index = preferencesLoadCallbacks.indexOf(callback);
@@ -124,7 +96,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     requestPreferences: () => {
         ipcRenderer.send('preferences:request');
     },
-    savePreferences: (preferences: { appearance: string }) => {
+    savePreferences: (preferences: Partial<Preferences>) => {
         ipcRenderer.send('preferences:save', preferences);
     }
 });

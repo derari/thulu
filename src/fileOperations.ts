@@ -1,7 +1,15 @@
 import * as fs from "fs";
 import * as path from "path";
 import {app} from "electron";
-import {getExtensionForContentType, isBinaryContentType} from './contentTypeUtils.js';
+import {getExtensionForContentType, isBinaryContentType} from './shared/contentTypeUtils.js';
+import {getHeader} from './shared/headers.js';
+import type {
+    DirectoryEntry,
+    FileOperationResult,
+    HistoryMeta,
+    SaveHistoryParams,
+    SaveHistoryResult
+} from './shared/ipc.js';
 
 const preferencesFileName = 'preferences.json';
 
@@ -44,7 +52,7 @@ export function readFileBinary(filePath: string): string | null {
     return buffer.toString('base64');
 }
 
-export function writeFile(filePath: string, content: string): { success: boolean; error?: string } {
+export function writeFile(filePath: string, content: string): FileOperationResult {
     try {
         fs.writeFileSync(filePath, content, 'utf-8');
         return {success: true};
@@ -54,7 +62,7 @@ export function writeFile(filePath: string, content: string): { success: boolean
     }
 }
 
-export function listDirectory(dirPath: string): Array<{ name: string; isDirectory: boolean; isFile: boolean }> {
+export function listDirectory(dirPath: string): DirectoryEntry[] {
     if (!fs.existsSync(dirPath)) {
         return [];
     }
@@ -70,7 +78,7 @@ export function fileExists(filePath: string): boolean {
     return fs.existsSync(filePath);
 }
 
-export function deletePath(targetPath: string): { success: boolean; error?: string } {
+export function deletePath(targetPath: string): FileOperationResult {
     try {
         if (!fs.existsSync(targetPath)) {
             return { success: false, error: 'Path does not exist' };
@@ -92,7 +100,7 @@ export function deletePath(targetPath: string): { success: boolean; error?: stri
     }
 }
 
-export function renamePath(oldPath: string, newPath: string): { success: boolean; error?: string } {
+export function renamePath(oldPath: string, newPath: string): FileOperationResult {
     try {
         if (!fs.existsSync(oldPath)) {
             return { success: false, error: 'Path does not exist' };
@@ -111,7 +119,7 @@ export function renamePath(oldPath: string, newPath: string): { success: boolean
     }
 }
 
-export function createFolder(folderPath: string): { success: boolean; error?: string } {
+export function createFolder(folderPath: string): FileOperationResult {
     try {
         if (fs.existsSync(folderPath)) {
             return { success: false, error: 'Folder already exists' };
@@ -126,7 +134,7 @@ export function createFolder(folderPath: string): { success: boolean; error?: st
     }
 }
 
-export function createFile(filePath: string, content: string): { success: boolean; error?: string } {
+export function createFile(filePath: string, content: string): FileOperationResult {
     try {
         if (fs.existsSync(filePath)) {
             return { success: false, error: 'File already exists' };
@@ -146,7 +154,7 @@ export function createFile(filePath: string, content: string): { success: boolea
     }
 }
 
-export function updateCollectionName(collectionPath: string, newName: string): { success: boolean; error?: string } {
+export function updateCollectionName(collectionPath: string, newName: string): FileOperationResult {
     try {
         const thuluJsonPath = path.join(collectionPath, '.thulu.json');
 
@@ -177,33 +185,11 @@ export function updateCollectionName(collectionPath: string, newName: string): {
     }
 }
 
-export interface SaveHistoryParams {
-    collectionPath: string;
-    timestamp: string;
-    requestFile: string;
-    sectionName: string;
-    environment?: string;
-    verb: string;
-    url: string;
-    requestHeaders: Record<string, string>;
-    requestBody?: string;
-    statusCode: number;
-    statusLine: string;
-    responseHeaders: Record<string, string>;
-    responseBody?: string;
-    timeMs: number;
-    redirects?: { status: number; method: string; url: string }[];
-}
-
-function getContentTypeHeader(headers: Record<string, string>): string | null {
-    return headers['content-type'] || headers['Content-Type'] || null;
-}
-
 /** Reserved filenames that must not be overwritten in the entry directory */
 const RESERVED_NAMES = new Set(['meta.json']);
 
 export function parseContentDispositionFilename(headers: Record<string, string>): string | null {
-    const cd = headers['content-disposition'] || headers['Content-Disposition'] || '';
+    const cd = getHeader(headers, 'content-disposition') || '';
     if (!cd) return null;
 
     // Prefer RFC 5987 filename* over filename
@@ -246,13 +232,13 @@ function safeFolderSegment(value: string, maxLen = 40): string {
     return value.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').substring(0, maxLen);
 }
 
-export function listHistoryEntries(collectionPath: string, limit = 200): Array<Record<string, unknown>> {
+export function listHistoryEntries(collectionPath: string, limit = 200): HistoryMeta[] {
     const responsesDir = path.join(collectionPath, '.thulu', 'responses');
     if (!fs.existsSync(responsesDir)) {
         return [];
     }
 
-    const entries: Array<{ id: string; timestamp: string; meta: Record<string, unknown> }> = [];
+    const entries: Array<{ id: string; timestamp: string; meta: Omit<HistoryMeta, 'id'> }> = [];
 
     let dirs: string[];
     try {
@@ -277,7 +263,7 @@ export function listHistoryEntries(collectionPath: string, limit = 200): Array<R
     return entries.slice(0, limit).map(e => ({ ...e.meta, id: e.id }));
 }
 
-export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean; error?: string; entryPath?: string; responseBodyFile?: string; requestBodyFile?: string } {
+export function saveHistoryEntry(params: SaveHistoryParams): SaveHistoryResult {
     try {
         const {
             collectionPath, timestamp, requestFile, sectionName, environment,
@@ -296,7 +282,7 @@ export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean;
         fs.mkdirSync(entryDir, { recursive: true });
 
         // Determine body encoding and write body files using content-type for extension
-        const responseContentType = getContentTypeHeader(responseHeaders);
+        const responseContentType = getHeader(responseHeaders, 'content-type') ?? null;
         const responseIsBinary = isBinaryContentType(responseContentType);
         const responseExt = getExtensionForContentType(responseContentType);
         let responseBodyFile: string | undefined;
@@ -315,7 +301,7 @@ export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean;
             responseBodySize = responseBuffer.length;
         }
 
-        const requestContentType = getContentTypeHeader(requestHeaders);
+        const requestContentType = getHeader(requestHeaders, 'content-type') ?? null;
         const requestExt = getExtensionForContentType(requestContentType);
         let requestBodyFile: string | undefined;
         let requestBodySize: number | undefined;
@@ -327,7 +313,7 @@ export function saveHistoryEntry(params: SaveHistoryParams): { success: boolean;
             requestBodySize = requestBuffer.length;
         }
 
-        const meta = {
+        const meta: Omit<HistoryMeta, 'id'> = {
             timestamp,
             requestFile,
             sectionName,

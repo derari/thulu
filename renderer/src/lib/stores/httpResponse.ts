@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import type { RedirectHop } from '$shared/ipc';
 import type { ResolvedRequest } from '../editor/httpRequestExecutor.js';
 
 export interface HttpResponse {
@@ -7,7 +8,7 @@ export interface HttpResponse {
     /** Base64-encoded raw response bytes */
     bodyBytes: string;
     timeMs: number;
-    redirects?: { status: number; method: string; url: string }[];
+    redirects?: RedirectHop[];
     resolvedRequest?: ResolvedRequest;
     responseBodyFilePath?: string;
     responseBodySize?: number;

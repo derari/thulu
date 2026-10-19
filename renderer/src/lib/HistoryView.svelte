@@ -1,6 +1,6 @@
 <script lang="ts">
     import {onMount} from 'svelte';
-    import type {HistoryMeta} from './collection.js';
+    import type {HistoryMeta} from '$shared/ipc';
     import {httpResponse} from './stores/httpResponse.js';
     import {formatVerb, getStatusColor, getVerbColor} from './editor/httpColors.js';
 
@@ -13,8 +13,7 @@
 
     onMount(async () => {
         try {
-            const raw = await window.electronAPI.listHistory(collectionPath);
-            entries = raw as unknown as HistoryMeta[];
+            entries = await window.electronAPI.listHistory(collectionPath);
         } catch (e) {
             error = e instanceof Error ? e.message : String(e);
         } finally {

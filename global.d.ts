@@ -1,5 +1,17 @@
 // Globally declared types used by both Electron and SvelteKit
 
+import type {
+    DirectoryEntry,
+    FileOperationResult,
+    HistoryMeta,
+    HttpRequestOptions,
+    HttpResponse,
+    SaveHistoryParams,
+    SaveHistoryResult,
+    ScriptExecutionParams,
+    ScriptExecutionResult
+} from './src/shared/ipc';
+
 declare global {
     namespace App {
         // interface Error {}
@@ -32,68 +44,27 @@ declare global {
     // Compare this to the contextBridge.exposeInMainWorld() call in src/preload.ts.
     interface Window {
         electronAPI: {
-            listDirectory: (dirPath: string) => Promise<Array<{ name: string, isDirectory: boolean, isFile: boolean }>>;
+            listDirectory: (dirPath: string) => Promise<DirectoryEntry[]>;
             readFile: (filePath: string) => Promise<string | null>;
             readFileBinary: (filePath: string) => Promise<string | null>;
-            writeFile: (filePath: string, content: string) => Promise<{ success: boolean, error?: string }>;
+            writeFile: (filePath: string, content: string) => Promise<FileOperationResult>;
             fileExists: (filePath: string) => Promise<boolean>;
-            deletePath: (filePath: string) => Promise<{ success: boolean, error?: string }>;
-            renamePath: (oldPath: string, newPath: string) => Promise<{ success: boolean, error?: string }>;
-            createFolder: (folderPath: string) => Promise<{ success: boolean, error?: string }>;
-            createFile: (filePath: string, content: string) => Promise<{ success: boolean, error?: string }>;
-            updateCollectionName: (collectionPath: string, newName: string) => Promise<{ success: boolean, error?: string }>;
+            deletePath: (filePath: string) => Promise<FileOperationResult>;
+            renamePath: (oldPath: string, newPath: string) => Promise<FileOperationResult>;
+            createFolder: (folderPath: string) => Promise<FileOperationResult>;
+            createFile: (filePath: string, content: string) => Promise<FileOperationResult>;
+            updateCollectionName: (collectionPath: string, newName: string) => Promise<FileOperationResult>;
             showInFileSystem: (path: string) => Promise<{ success: boolean }>;
             openFile: (filePath: string) => Promise<{ success: boolean }>;
-            httpRequest: (options: {
-                url: string,
-                method: string,
-                headers: Record<string, string>,
-                body?: string,
-                rejectUnauthorized?: boolean,
-                followRedirects?: boolean
-            }) => Promise<{
-                ok: boolean,
-                status: number,
-                statusText: string,
-                headers: Record<string, string>,
-                /** Base64-encoded response body bytes */
-                body: string,
-                redirects: { status: number, method: string, url: string }[]
-            }>;
-            executeScript: (params: {
-                code: string,
-                timeout: number,
-                collectionPath?: string,
-                responseBody?: string,
-                responseContentType?: string
-            }) => Promise<{
-                success: boolean,
-                error?: string,
-                logs: string[],
-                globalVariableChanges?: Record<string, string>
-            }>;
+            openExternal: (url: string) => Promise<{ success: boolean }>;
+            httpRequest: (options: HttpRequestOptions) => Promise<HttpResponse>;
+            executeScript: (params: ScriptExecutionParams) => Promise<ScriptExecutionResult>;
             onPreferencesOpen: (callback: () => void) => void;
             onPreferencesLoad: (callback: (preferences: Preferences) => void) => () => void;
             requestPreferences: () => void;
             savePreferences: (preferences: Partial<Preferences>) => void;
-            saveHistory: (params: {
-                collectionPath: string;
-                timestamp: string;
-                requestFile: string;
-                sectionName: string;
-                environment?: string;
-                verb: string;
-                url: string;
-                requestHeaders: Record<string, string>;
-                requestBody?: string;
-                statusCode: number;
-                statusLine: string;
-                responseHeaders: Record<string, string>;
-                responseBody?: string;
-                timeMs: number;
-                redirects?: { status: number; method: string; url: string }[];
-            }) => Promise<{ success: boolean; error?: string; entryPath?: string; responseBodyFile?: string; requestBodyFile?: string }>;
-            listHistory: (collectionPath: string) => Promise<Array<Record<string, unknown>>>;
+            saveHistory: (params: SaveHistoryParams) => Promise<SaveHistoryResult>;
+            listHistory: (collectionPath: string) => Promise<HistoryMeta[]>;
         };
     }
 

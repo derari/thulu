@@ -10,10 +10,7 @@
     {
       "filter": [
         "package.json",
-        "dist/main.js",
-        "dist/preload.js",
-        "dist/fileOperations.js",
-        "dist/scriptExecutor.js"
+        "dist/**/*.js"
       ]
     },
     {

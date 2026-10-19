@@ -1,7 +1,8 @@
 import type { HttpSection, ParsedHttpFile } from './httpParser';
 import type { PostScript } from '../collection';
 import { getEnvironmentVariablesMap } from '../environmentParser';
-import { getHeader } from '../headers';
+import { getHeader } from '$shared/headers';
+import type { RedirectHop, ScriptExecutionResult } from '$shared/ipc';
 
 export interface RequestExecutionParams {
     parsedFile: ParsedHttpFile;
@@ -28,15 +29,8 @@ export interface HttpRequestResponse {
     bodyBytes: string;
     timeMs: number;
     scriptResults?: ScriptExecutionResult[];
-    redirects?: { status: number; method: string; url: string }[];
+    redirects?: RedirectHop[];
     resolvedRequest?: ResolvedRequest;
-}
-
-export interface ScriptExecutionResult {
-    success: boolean;
-    error?: string;
-    logs: string[];
-    globalVariableChanges?: Record<string, string>;
 }
 
 function extractScriptCode(lines: string[], postScript: PostScript): string {

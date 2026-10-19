@@ -1,19 +1,5 @@
 import * as vm from 'vm';
-
-export interface ScriptExecutionParams {
-	code: string;
-	timeout: number;
-	collectionPath?: string;
-	responseBody?: string;
-	responseContentType?: string;
-}
-
-export interface ScriptExecutionResult {
-	success: boolean;
-	error?: string;
-	logs: string[];
-	globalVariableChanges?: Record<string, string>;
-}
+import type {ScriptExecutionParams, ScriptExecutionResult} from './shared/ipc.js';
 
 const DEFAULT_TIMEOUT = 5000;
 

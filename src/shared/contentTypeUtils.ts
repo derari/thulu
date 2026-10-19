@@ -1,18 +1,27 @@
+/** Text formats the app can format and syntax-highlight. */
+export type TextFormat = 'json' | 'xml' | 'html';
+
 interface ContentTypeInfo {
 	extension: string;
 	isBinary: boolean;
+	format?: TextFormat;
 }
 
-const CONTENT_TYPE_MAPPINGS: Array<{ pattern: RegExp; extension: string; isBinary: boolean }> = [
+interface ContentTypeMapping extends ContentTypeInfo {
+	pattern: RegExp;
+}
+
+// Patterns are tested in order, so specific types come before general fallbacks
+const CONTENT_TYPE_MAPPINGS: ContentTypeMapping[] = [
 	// JSON
-	{ pattern: /^application\/json\b/i, extension: '.json', isBinary: false },
-	{ pattern: /^text\/json\b/i, extension: '.json', isBinary: false },
+	{ pattern: /^application\/json\b/i, extension: '.json', isBinary: false, format: 'json' },
+	{ pattern: /^text\/json\b/i, extension: '.json', isBinary: false, format: 'json' },
 	// XML
-	{ pattern: /^application\/xml\b/i, extension: '.xml', isBinary: false },
-	{ pattern: /^text\/xml\b/i, extension: '.xml', isBinary: false },
+	{ pattern: /^application\/xml\b/i, extension: '.xml', isBinary: false, format: 'xml' },
+	{ pattern: /^text\/xml\b/i, extension: '.xml', isBinary: false, format: 'xml' },
 	// HTML
-	{ pattern: /^text\/html\b/i, extension: '.html', isBinary: false },
-	{ pattern: /^application\/xhtml\+xml\b/i, extension: '.html', isBinary: false },
+	{ pattern: /^text\/html\b/i, extension: '.html', isBinary: false, format: 'html' },
+	{ pattern: /^application\/xhtml\+xml\b/i, extension: '.html', isBinary: false, format: 'html' },
 	// Text subtypes
 	{ pattern: /^text\/plain\b/i, extension: '.txt', isBinary: false },
 	{ pattern: /^text\/css\b/i, extension: '.css', isBinary: false },
@@ -24,7 +33,7 @@ const CONTENT_TYPE_MAPPINGS: Array<{ pattern: RegExp; extension: string; isBinar
 	// Form data
 	{ pattern: /^application\/x-www-form-urlencoded\b/i, extension: '.txt', isBinary: false },
 	// SVG (text-based image)
-	{ pattern: /^image\/svg\+xml\b/i, extension: '.svg', isBinary: false },
+	{ pattern: /^image\/svg\+xml\b/i, extension: '.svg', isBinary: false, format: 'xml' },
 	// Binary images
 	{ pattern: /^image\/png\b/i, extension: '.png', isBinary: true },
 	{ pattern: /^image\/jpeg\b/i, extension: '.jpg', isBinary: true },
@@ -54,20 +63,25 @@ const CONTENT_TYPE_MAPPINGS: Array<{ pattern: RegExp; extension: string; isBinar
 	{ pattern: /^application\/x-protobuf\b/i, extension: '.bin', isBinary: true },
 	{ pattern: /^multipart\//i, extension: '.bin', isBinary: true },
 	// General fallback patterns (from content-type name)
-	{ pattern: /\bjson\b/i, extension: '.json', isBinary: false },
-	{ pattern: /\bxml\b/i, extension: '.xml', isBinary: false },
-	{ pattern: /\bhtml\b/i, extension: '.html', isBinary: false },
+	{ pattern: /\bjson\b/i, extension: '.json', isBinary: false, format: 'json' },
+	{ pattern: /\bxml\b/i, extension: '.xml', isBinary: false, format: 'xml' },
+	{ pattern: /\bhtml\b/i, extension: '.html', isBinary: false, format: 'html' },
 ];
 
 function getContentTypeInfo(contentType: string | null): ContentTypeInfo {
 	if (!contentType) return { extension: '.bin', isBinary: false };
 	const mimeType = contentType.split(';')[0].trim();
-	for (const mapping of CONTENT_TYPE_MAPPINGS) {
-		if (mapping.pattern.test(mimeType)) {
-			return { extension: mapping.extension, isBinary: mapping.isBinary };
+	for (const { pattern, ...info } of CONTENT_TYPE_MAPPINGS) {
+		if (pattern.test(mimeType)) {
+			return info;
 		}
 	}
 	return { extension: '.bin', isBinary: false };
+}
+
+/** The format used to format and highlight a body of this content type, or null for anything else. */
+export function getTextFormat(contentType: string | null): TextFormat | null {
+	return getContentTypeInfo(contentType).format ?? null;
 }
 
 export function getExtensionForContentType(contentType: string | null): string {

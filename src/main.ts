@@ -16,12 +16,19 @@ import {
     readFileBinary,
     renamePath,
     saveHistoryEntry,
-    type SaveHistoryParams,
     savePreferences,
     updateCollectionName,
     writeFile
 } from './fileOperations.js';
-import {executeScript, type ScriptExecutionParams} from './scriptExecutor.js';
+import {executeScript} from './scriptExecutor.js';
+import type {
+    HttpRawResponse,
+    HttpRequestOptions,
+    HttpResponse,
+    RedirectHop,
+    SaveHistoryParams,
+    ScriptExecutionParams
+} from './shared/ipc.js';
 
 const serveURL = serve({directory: '.'});
 const isDev: boolean = !app.isPackaged;
@@ -166,27 +173,7 @@ app.on("window-all-closed", function handleWindowAllClosed() {
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECTS = 10;
 
-interface HttpRawResponse {
-    ok: boolean;
-    status: number;
-    statusText: string;
-    headers: Record<string, string>;
-    body: string;
-}
-
-interface RedirectHop {
-    status: number;
-    method: string;
-    url: string;
-}
-
-function makeSingleHttpRequest(options: {
-    url: string;
-    method: string;
-    headers: Record<string, string>;
-    body?: string;
-    rejectUnauthorized?: boolean;
-}): Promise<HttpRawResponse> {
+function makeSingleHttpRequest(options: Omit<HttpRequestOptions, 'followRedirects'>): Promise<HttpRawResponse> {
     return new Promise((resolve, reject) => {
         const urlObj = new URL(options.url);
         const isHttps = urlObj.protocol === 'https:';
@@ -242,14 +229,7 @@ function makeSingleHttpRequest(options: {
     });
 }
 
-async function makeHttpRequest(options: {
-    url: string;
-    method: string;
-    headers: Record<string, string>;
-    body?: string;
-    rejectUnauthorized?: boolean;
-    followRedirects?: boolean;
-}): Promise<HttpRawResponse & { redirects: RedirectHop[] }> {
+async function makeHttpRequest(options: HttpRequestOptions): Promise<HttpResponse> {
     const followRedirects = options.followRedirects ?? true;
     const redirects: RedirectHop[] = [];
 
@@ -356,14 +336,7 @@ app.once('ready', function handleIPCReady() {
     ipcMain.on('preferences:request', function handlePreferencesRequest() {
         sendPreferencesToRenderer();
     });
-    ipcMain.handle('http:request', async function handleHttpRequest(event, options: {
-        url: string;
-        method: string;
-        headers: Record<string, string>;
-        body?: string;
-        rejectUnauthorized?: boolean;
-        followRedirects?: boolean;
-    }) {
+    ipcMain.handle('http:request', async function handleHttpRequest(event, options: HttpRequestOptions) {
         return makeHttpRequest(options);
     });
     ipcMain.handle('script:execute', function handleScriptExecute(event, params: ScriptExecutionParams) {

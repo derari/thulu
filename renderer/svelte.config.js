@@ -6,6 +6,10 @@ const config = {
 	preprocess: preprocess(),
 
 	kit: {
+		alias: {
+			// Code shared with the Electron main process
+			$shared: '../src/shared'
+		},
 		adapter: adapter({
 			fallback: 'index.html',
 			pages: 'build',

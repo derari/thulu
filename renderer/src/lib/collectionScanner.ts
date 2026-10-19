@@ -1,12 +1,7 @@
 import type { CollectionItem, EnvironmentConfig } from './collection';
 import { environmentFilePath, isEnvironmentFileName } from './environmentFiles';
 import { joinPath } from './paths';
-
-interface DirectoryEntry {
-    name: string;
-    isDirectory: boolean;
-    isFile: boolean;
-}
+import type { DirectoryEntry } from '$shared/ipc';
 
 async function listDirectory(dirPath: string): Promise<DirectoryEntry[]> {
     const entries: DirectoryEntry[] = [];

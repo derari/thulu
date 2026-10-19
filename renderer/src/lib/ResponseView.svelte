@@ -16,9 +16,9 @@
         setFormatToggleCallback
     } from './editor/responseFormatGutter.js';
     import {createBodyLinkExtension} from './editor/bodyLinkWidget.js';
-    import {isBinaryContentType} from './editor/contentTypeUtils.js';
+    import {getTextFormat, isBinaryContentType} from '$shared/contentTypeUtils';
     import HistoryView from './HistoryView.svelte';
-    import {getHeader} from './headers';
+    import {getHeader} from '$shared/headers';
     import {preferences} from './stores/preferences.js';
 
     export let orientation: 'horizontal' | 'vertical' = 'vertical';
@@ -64,19 +64,18 @@
     }
 
     function canFormatContentType(ct: string): boolean {
-        const lowerCt = ct.toLowerCase();
-        return lowerCt.includes('json') || lowerCt.includes('xml') || lowerCt.includes('html');
+        return getTextFormat(ct) !== null;
     }
 
     function formatBody(body: string, ct: string): string {
-        const lowerCt = ct.toLowerCase();
+        const format = getTextFormat(ct);
 
         try {
-            if (lowerCt.includes('json')) {
+            if (format === 'json') {
                 return JSON.stringify(JSON.parse(body), null, 2);
             }
 
-            if (lowerCt.includes('xml') || lowerCt.includes('html')) {
+            if (format === 'xml' || format === 'html') {
                 // Simple XML/HTML formatting
                 const formatted = body
                     .replace(/>\s*</g, '>\n<')
