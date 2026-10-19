@@ -1,4 +1,5 @@
 <script lang="ts">
+    import {api} from './api';
     // Collection items component with environment support
     import {currentCollection} from './stores/currentCollection.js';
     import {openFile} from './stores/openFile.js';
@@ -195,7 +196,7 @@
         confirmDeleteItem = null;
         confirmDeleteType = null;
 
-        const result = await window.electronAPI.deletePath(pathToDelete);
+        const result = await api.deletePath(pathToDelete);
 
         if (result.success) {
             if ($openFile && $openFile.filePath === pathToDelete) {
@@ -264,13 +265,13 @@
             const extension = getExtension(renameItem.filePath);
             const newNameWithExtension = newName + extension;
             const newPath = joinPath(dir, newNameWithExtension);
-            operations.push(window.electronAPI.renamePath(renameItem.filePath, newPath));
+            operations.push(api.renamePath(renameItem.filePath, newPath));
         }
 
         if (renameFolder && renameItem.folderPath) {
             const dir = dirName(renameItem.folderPath);
             const newPath = joinPath(dir, newName);
-            operations.push(window.electronAPI.renamePath(renameItem.folderPath, newPath));
+            operations.push(api.renamePath(renameItem.folderPath, newPath));
         }
 
         const results = await Promise.all(operations);
@@ -360,7 +361,7 @@
 
         if (newItemType === 'folder') {
             const newFolderPath = joinPath(parentPath, name);
-            const result = await window.electronAPI.createFolder(newFolderPath);
+            const result = await api.createFolder(newFolderPath);
 
             if (result.success) {
                 await currentCollection.loadCollection(
@@ -390,7 +391,7 @@
             if (!newItemParent.folderPath) {
                 const parentItemName = getCurrentName(newItemParent);
                 targetFolder = joinPath(parentPath, parentItemName);
-                await window.electronAPI.createFolder(targetFolder);
+                await api.createFolder(targetFolder);
             }
 
             const fileName = `${name}.http`;
@@ -403,7 +404,7 @@ GET https://example.com
 ###
 `;
 
-            const result = await window.electronAPI.createFile(newFilePath, initialContent);
+            const result = await api.createFile(newFilePath, initialContent);
 
             if (result.success) {
                 await currentCollection.loadCollection(

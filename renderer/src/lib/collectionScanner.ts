@@ -1,3 +1,4 @@
+import { api } from './api';
 import type { CollectionItem, EnvironmentConfig } from './collection';
 import { environmentFilePath, isEnvironmentFileName } from './environmentFiles';
 import { joinPath } from './paths';
@@ -5,7 +6,7 @@ import type { DirectoryEntry } from '$shared/ipc';
 
 async function listDirectory(dirPath: string): Promise<DirectoryEntry[]> {
     const entries: DirectoryEntry[] = [];
-    const fileList = await window.electronAPI.listDirectory(dirPath);
+    const fileList = await api.listDirectory(dirPath);
 
     for (const entry of fileList) {
         entries.push(entry);
@@ -16,7 +17,7 @@ async function listDirectory(dirPath: string): Promise<DirectoryEntry[]> {
 
 async function fileExists(filePath: string): Promise<boolean> {
     try {
-        return await window.electronAPI.fileExists(filePath);
+        return await api.fileExists(filePath);
     } catch (error) {
         console.error('error checking ' + filePath, error);
         return false;

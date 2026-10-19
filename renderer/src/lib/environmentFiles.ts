@@ -1,3 +1,4 @@
+import { api } from './api';
 import type { EnvironmentConfig } from './collection';
 import type { EnvironmentVariable } from './environmentParser';
 import { baseName, dirName, joinPath, normalizePath } from './paths';
@@ -72,7 +73,7 @@ function parseEnvironmentFile(content: string): EnvironmentFile {
 /** Reads one env file; a missing, empty or unparsable file yields an empty object. */
 export async function readEnvironmentFile(folderPath: string, isPrivate: boolean): Promise<EnvironmentFile> {
     try {
-        const content = await window.electronAPI.readFile(environmentFilePath(folderPath, isPrivate));
+        const content = await api.readFile(environmentFilePath(folderPath, isPrivate));
         return content ? parseEnvironmentFile(content) : {};
     } catch (error) {
         return {};
@@ -92,7 +93,7 @@ export async function writeEnvironmentFile(
     isPrivate: boolean,
     file: EnvironmentFile
 ): Promise<void> {
-    const result = await window.electronAPI.writeFile(
+    const result = await api.writeFile(
         environmentFilePath(folderPath, isPrivate),
         JSON.stringify(file, null, 2)
     );
@@ -108,7 +109,7 @@ async function writeEnvironmentFiles(folderPath: string, files: EnvironmentFiles
 
 /** Creates an empty `http-client.env.json` in the folder. */
 export async function createEnvironmentFile(folderPath: string): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.createFile(environmentFilePath(folderPath, false), '{}');
+    return api.createFile(environmentFilePath(folderPath, false), '{}');
 }
 
 /** Deletes whichever of the folder's env files exist; true if every deletion succeeded. */
@@ -116,10 +117,10 @@ export async function deleteEnvironmentFiles(config: EnvironmentConfig): Promise
     const operations: Promise<{ success: boolean; error?: string }>[] = [];
 
     if (config.hasPublicEnv) {
-        operations.push(window.electronAPI.deletePath(environmentFilePath(config.folderPath, false)));
+        operations.push(api.deletePath(environmentFilePath(config.folderPath, false)));
     }
     if (config.hasPrivateEnv) {
-        operations.push(window.electronAPI.deletePath(environmentFilePath(config.folderPath, true)));
+        operations.push(api.deletePath(environmentFilePath(config.folderPath, true)));
     }
 
     const results = await Promise.all(operations);

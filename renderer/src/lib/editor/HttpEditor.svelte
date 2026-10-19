@@ -12,13 +12,11 @@
     import {parseHttpFile} from './httpParser.js';
     import {toggleLineComment} from './commentUtils.js';
     import {openFile} from '../stores/openFile.js';
-    import {httpResponse} from '../stores/httpResponse.js';
     import {currentCollection} from '../stores/currentCollection.js';
-    import {globalVariables} from '../stores/globalVariables.js';
     import {isDarkMode} from '../stores/theme.js';
     import {environmentSelection} from '../stores/environmentSelection.js';
     import {type AvailableEnvironment, listAvailableEnvironments} from '../environmentParser.js';
-    import {executeHttpRequest} from './httpRequestExecutor.js';
+    import {runRequest} from './requestRunner.js';
     import {dirName, relativePath} from '../paths.js';
 
     export let content: string = '';
@@ -114,107 +112,18 @@
     async function executeRequest(sectionLineNumber: number) {
         await openFile.save();
 
-        const currentContent = editorView ? editorView.state.doc.toString() : content;
-        const parsed = parseHttpFile(currentContent);
-
         if (!$openFile || !$currentCollection) {
             console.error('No file or collection loaded');
             return;
         }
 
-        const filePath = $openFile.filePath;
-        const fileDirectory = dirName(filePath);
-
-        const collectionPath = $currentCollection.path;
-        const collectionGlobalVars = globalVariables.get(collectionPath);
-
-        try {
-            const response = await executeHttpRequest({
-                parsedFile: parsed,
-                sectionLineNumber,
-                selectedEnvironment,
-                fileDirectory,
-                collectionPath,
-                globalVariables: collectionGlobalVars
-            });
-
-            if (response.scriptResults && response.scriptResults.length > 0) {
-                console.log('Post-script results:', response.scriptResults);
-                response.scriptResults.forEach((result, index) => {
-                    if (result.success) {
-                        console.log(`Script ${index + 1}: Success`);
-                        if (result.logs.length > 0) {
-                            console.log('  Logs:', result.logs);
-                        }
-                        if (result.globalVariableChanges) {
-                            console.log('  Global variable changes:', result.globalVariableChanges);
-                            for (const [key, value] of Object.entries(result.globalVariableChanges)) {
-                                globalVariables.set(collectionPath, key, value);
-                            }
-                        }
-                    } else {
-                        console.error(`Script ${index + 1}: Failed -`, result.error);
-                        if (result.logs.length > 0) {
-                            console.log('  Logs:', result.logs);
-                        }
-                    }
-                });
-            }
-
-            httpResponse.setResponse(response);
-
-            // Save to history and attach file paths back to the response for the body link widget
-            const section = parsed.sections.find(
-                s => sectionLineNumber >= s.startLineNumber && sectionLineNumber < s.endLineNumber
-            );
-            const relativeFile = relativePath(filePath, collectionPath);
-            const statusCodeMatch = response.statusLine.match(/\s(\d+)\s/);
-            const statusCode = statusCodeMatch ? parseInt(statusCodeMatch[1], 10) : 0;
-            window.electronAPI.saveHistory({
-                collectionPath,
-                timestamp: new Date().toISOString(),
-                requestFile: relativeFile,
-                sectionName: section?.name ?? '',
-                environment: selectedEnvironment || undefined,
-                verb: response.resolvedRequest?.method ?? '',
-                url: response.resolvedRequest?.url ?? '',
-                requestHeaders: response.resolvedRequest?.headers ?? {},
-                requestBody: response.resolvedRequest?.body,
-                statusCode,
-                statusLine: response.statusLine,
-                responseHeaders: response.headers,
-                responseBody: response.bodyBytes,
-                timeMs: response.timeMs,
-                redirects: response.redirects
-            }).then(result => {
-                if (result.entryPath) {
-                    // Use the actual filenames returned by the save (may differ from content-type default
-                    // when Content-Disposition provided a custom name)
-                    httpResponse.patchFilePaths({
-                        responseBodyFilePath: result.responseBodyFile
-                            ? `${result.entryPath}/${result.responseBodyFile}`
-                            : undefined,
-                        responseBodySize: response.bodyBytes
-                            ? atob(response.bodyBytes).length
-                            : undefined,
-                        requestBodyFilePath: result.requestBodyFile
-                            ? `${result.entryPath}/${result.requestBodyFile}`
-                            : undefined,
-                        requestBodySize: response.resolvedRequest?.body
-                            ? new TextEncoder().encode(response.resolvedRequest.body).length
-                            : undefined,
-                    });
-                }
-            }).catch(err => console.error('Failed to save history entry:', err));
-        } catch (error) {
-            console.error('Request execution failed:', error);
-            httpResponse.setResponse({
-                statusLine: 'Error',
-                headers: {},
-                bodyBytes: btoa(error instanceof Error ? error.message : String(error)),
-                timeMs: 0
-            });
-        }
+        await runRequest({
+            content: editorView ? editorView.state.doc.toString() : content,
+            sectionLineNumber,
+            selectedEnvironment,
+            filePath: $openFile.filePath,
+            collectionPath: $currentCollection.path
+        });
     }
 
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import {api} from './api';
     import {joinPath} from './paths';
     import {preferences} from './stores/preferences.js';
     import {currentCollection, currentCollectionName, hasCurrentCollection} from './stores/currentCollection.js';
@@ -79,7 +80,7 @@
 
         if (newItemType === 'folder') {
             const newFolderPath = joinPath(rootPath, name);
-            const result = await window.electronAPI.createFolder(newFolderPath);
+            const result = await api.createFolder(newFolderPath);
 
             if (result.success) {
                 await currentCollection.loadCollection(
@@ -100,7 +101,7 @@ GET https://example.com
 ###
 `;
 
-            const result = await window.electronAPI.createFile(newFilePath, initialContent);
+            const result = await api.createFile(newFilePath, initialContent);
 
             if (result.success) {
                 await currentCollection.loadCollection(
@@ -126,7 +127,7 @@ GET https://example.com
 
         showRenameModal = false;
 
-        const result = await window.electronAPI.updateCollectionName(
+        const result = await api.updateCollectionName(
             $currentCollection.path,
             newName
         );
@@ -148,7 +149,7 @@ GET https://example.com
         event.stopPropagation();
         showHeaderMenu = false;
         if ($currentCollection) {
-            window.electronAPI.showInFileSystem($currentCollection.path);
+            api.showInFileSystem($currentCollection.path);
         }
     }
 

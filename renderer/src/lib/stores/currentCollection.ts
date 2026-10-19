@@ -1,3 +1,4 @@
+import { api } from '../api';
 import { derived, writable } from 'svelte/store';
 import type { CollectionItem, CurrentCollection } from '../collection';
 import { parseHttpFile } from '$lib/editor/httpParser.js';
@@ -11,7 +12,7 @@ async function parseCollectionItems(items: CollectionItem[]): Promise<Collection
         const parsedItem: CollectionItem = { ...item };
 
         if (item.filePath) {
-            const content = await window.electronAPI.readFile(item.filePath);
+            const content = await api.readFile(item.filePath);
             if (content) {
                 const parsed = parseHttpFile(content);
                 parsedItem.sections = parsed.sections;
@@ -77,7 +78,7 @@ function createCurrentCollectionStore() {
         },
 
         async refreshFile(filePath: string) {
-            const content = await window.electronAPI.readFile(filePath);
+            const content = await api.readFile(filePath);
             if (!content) {
                 return;
             }

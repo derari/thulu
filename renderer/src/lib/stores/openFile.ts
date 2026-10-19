@@ -1,3 +1,4 @@
+import { api } from '../api';
 import { get, writable } from 'svelte/store';
 import type { OpenFile } from '../collection';
 import { currentCollection } from './currentCollection.js';
@@ -14,7 +15,7 @@ function createOpenFileStore() {
         subscribe,
 
         async openFile(filePath: string, sectionLineNumber?: number) {
-            const content = await window.electronAPI.readFile(filePath);
+            const content = await api.readFile(filePath);
             set({
                 filePath,
                 content: content ?? '',
@@ -44,7 +45,7 @@ function createOpenFileStore() {
                 return { success: true };
             }
 
-            const result = await window.electronAPI.writeFile(
+            const result = await api.writeFile(
                 currentFile.filePath,
                 currentFile.content
             );

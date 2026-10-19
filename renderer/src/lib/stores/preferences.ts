@@ -1,3 +1,4 @@
+import { api } from '../api';
 import { get, writable } from 'svelte/store';
 
 /**
@@ -10,8 +11,8 @@ function createPreferencesStore() {
         if (typeof window === 'undefined' || !window.electronAPI) {
             return;
         }
-        const unsubscribe = window.electronAPI.onPreferencesLoad((preferences) => set(preferences));
-        window.electronAPI.requestPreferences();
+        const unsubscribe = api.onPreferencesLoad((preferences) => set(preferences));
+        api.requestPreferences();
         return unsubscribe;
     });
 
@@ -19,7 +20,7 @@ function createPreferencesStore() {
 
     function update(partial: Partial<Preferences>) {
         updateStore((current) => ({ ...current, ...partial }));
-        window.electronAPI.savePreferences(partial);
+        api.savePreferences(partial);
     }
 
     return {

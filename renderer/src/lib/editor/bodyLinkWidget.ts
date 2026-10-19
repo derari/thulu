@@ -1,3 +1,4 @@
+import { api } from '../api';
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
 
@@ -34,7 +35,7 @@ class BodyLinkWidget extends WidgetType {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            window.electronAPI.openFile(this.filePath);
+            api.openFile(this.filePath);
         });
 
         wrap.appendChild(btn);

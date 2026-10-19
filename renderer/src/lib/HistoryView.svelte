@@ -1,4 +1,5 @@
 <script lang="ts">
+    import {api} from './api';
     import {onMount} from 'svelte';
     import type {HistoryMeta} from '$shared/ipc';
     import {httpResponse} from './stores/httpResponse.js';
@@ -13,7 +14,7 @@
 
     onMount(async () => {
         try {
-            entries = await window.electronAPI.listHistory(collectionPath);
+            entries = await api.listHistory(collectionPath);
         } catch (e) {
             error = e instanceof Error ? e.message : String(e);
         } finally {
@@ -81,7 +82,7 @@
                     responseBodyBytes = '';
                 } else {
                     // UTF-8 text — re-encode to base64 bytes
-                    const text = (await window.electronAPI.readFile(`${basePath}/${entry.responseBodyFile}`)) ?? '';
+                    const text = (await api.readFile(`${basePath}/${entry.responseBodyFile}`)) ?? '';
                     responseBodyBytes = btoa(unescape(encodeURIComponent(text)));
                 }
             }
@@ -96,7 +97,7 @@
             requestBodySize = entry.requestBodySize;
             const reqIsBig = (entry.requestBodySize ?? 0) > 1_048_576;
             if (!reqIsBig) {
-                requestBody = (await window.electronAPI.readFile(`${basePath}/${entry.requestBodyFile}`)) ?? undefined;
+                requestBody = (await api.readFile(`${basePath}/${entry.requestBodyFile}`)) ?? undefined;
             }
         }
 

@@ -1,3 +1,4 @@
+import { api } from '../api';
 import type { HttpSection, ParsedHttpFile } from './httpParser';
 import type { PostScript } from '../collection';
 import { getEnvironmentVariablesMap } from '../environmentParser';
@@ -79,7 +80,7 @@ async function executePostScripts(
         }
 
         try {
-            const result = await window.electronAPI.executeScript({
+            const result = await api.executeScript({
                 code,
                 timeout: 5000,
                 collectionPath,
@@ -355,7 +356,7 @@ export async function executeHttpRequest(
     const startTime = performance.now();
 
     try {
-        const response = await window.electronAPI.httpRequest({
+        const response = await api.httpRequest({
             url: url,
             method: section.verb,
             headers: encodedHeaders,

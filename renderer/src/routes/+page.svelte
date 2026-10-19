@@ -1,4 +1,5 @@
 <script lang="ts">
+    import {api} from '../lib/api';
     import '@fontsource/inter/latin.css';
     import '@fontsource/monaspace-neon/latin.css';
 
@@ -19,7 +20,7 @@
     }
 
     onMount(() => {
-        window.electronAPI.onPreferencesOpen(handlePreferencesOpen);
+        api.onPreferencesOpen(handlePreferencesOpen);
     });
 </script>
 

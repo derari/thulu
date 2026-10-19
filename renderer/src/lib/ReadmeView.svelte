@@ -1,4 +1,5 @@
 <script lang="ts">
+    import {api} from './api';
     import {HtmlRenderer, Parser} from 'commonmark';
     import {onMount} from 'svelte';
     import {X} from 'lucide-svelte';
@@ -21,7 +22,7 @@
     const MARK_DOWN_EXT = '.md';
 
     async function listMarkdownFiles(): Promise<string[]> {
-        const entries = await window.electronAPI.listDirectory(folderPath);
+        const entries = await api.listDirectory(folderPath);
         return entries
             .filter(entry => entry.isFile && entry.name.endsWith(MARK_DOWN_EXT))
             .map(entry => entry.name)
@@ -62,7 +63,7 @@
                 return;
             }
             event.preventDefault();
-            window.electronAPI.openExternal(target.href);
+            api.openExternal(target.href);
             return;
         }
 
@@ -100,7 +101,7 @@
 
     async function handleOpenHttpFile(pathOrUrl: string) {
         const filePath = resolveFilePath(pathOrUrl);
-        const exists = await window.electronAPI.fileExists(filePath);
+        const exists = await api.fileExists(filePath);
 
         if (exists) {
             await openFile.openFile(filePath);
@@ -117,7 +118,7 @@
 
             for (const fileName of fileNames) {
                 const filePath = `${folderPath}/${fileName}`;
-                const content = await window.electronAPI.readFile(filePath);
+                const content = await api.readFile(filePath);
                 if (content) {
                     readmeFiles.push({ name: fileName, content });
                 }
@@ -161,7 +162,7 @@
             const resolvedPath = resolveFilePath(filePath);
 
             try {
-                const imageContent = await window.electronAPI.readFileBinary(resolvedPath);
+                const imageContent = await api.readFileBinary(resolvedPath);
                 if (imageContent) {
                     const ext = resolvedPath.toLowerCase().split('.').pop();
                     const mimeType = getMimeType(ext);
