@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { executeScript } from './scriptExecutor';
+import {describe, expect, it} from 'vitest';
+import {executeScript} from './scriptExecutor';
 
 describe('Script Executor', () => {
 	it('should execute simple console.log', () => {

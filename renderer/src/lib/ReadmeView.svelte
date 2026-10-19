@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { Parser, HtmlRenderer } from 'commonmark';
-    import { onMount } from 'svelte';
-    import { X } from 'lucide-svelte';
-    import { openFile } from './stores/openFile.js';
+    import {HtmlRenderer, Parser} from 'commonmark';
+    import {onMount} from 'svelte';
+    import {X} from 'lucide-svelte';
+    import {openFile} from './stores/openFile.js';
 
     export let folderPath: string;
     export let name: string = 'README';

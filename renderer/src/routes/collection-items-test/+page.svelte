@@ -1,9 +1,9 @@
 <script lang="ts">
-import CollectionItems from '../../lib/CollectionItems.svelte';
-import { currentCollection } from '../../lib/stores/currentCollection';
-import type {CollectionItem, CurrentCollection, EnvironmentConfig} from '../../lib/collection';
+    import CollectionItems from '../../lib/CollectionItems.svelte';
+    import {currentCollection} from '../../lib/stores/currentCollection';
+    import type {CollectionItem, CurrentCollection, EnvironmentConfig} from '../../lib/collection';
 
-const mockEnv: EnvironmentConfig = {
+    const mockEnv: EnvironmentConfig = {
   folderPath: '/env',
   hasPublicEnv: true,
   hasPrivateEnv: false

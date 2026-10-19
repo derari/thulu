@@ -1,7 +1,7 @@
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {getEnvironmentVariables, listAvailableEnvironments} from './environmentParser';
-import type {EnvironmentVariable, AvailableEnvironment} from './environmentParser';
-import type {CurrentCollection} from './collection';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AvailableEnvironment, EnvironmentVariable } from './environmentParser';
+import { getEnvironmentVariables, listAvailableEnvironments } from './environmentParser';
+import type { CurrentCollection } from './collection';
 
 // Mock the window.electronAPI
 const mockReadFile = vi.fn();
@@ -42,9 +42,9 @@ describe('environmentParser - nested folder inheritance', () => {
             abx: 'alice',
             axx: 'alice'
         },
-		test_ab: {
-			ab: 'alice',
-		}
+        test_ab: {
+            ab: 'alice'
+        }
     };
 
     const bobEnvFile = {
@@ -54,9 +54,9 @@ describe('environmentParser - nested folder inheritance', () => {
             abc: 'bob',
             abx: 'bob'
         },
-		test_ab: {
-			ab: 'bob',
-		}
+        test_ab: {
+            ab: 'bob'
+        }
     };
 
     const carolEnvFile = {
@@ -65,7 +65,7 @@ describe('environmentParser - nested folder inheritance', () => {
             xbc: 'carol',
             axc: 'carol',
             abc: 'carol'
-        },
+        }
     };
 
     beforeEach(() => {
@@ -299,27 +299,27 @@ describe('environmentParser - nested folder inheritance', () => {
         expect(axx!.isEditable).toBe(true);
     });
 
-	it('should correctly load variables of bob for carol', async () => {
-		const variables = await getEnvironmentVariables('test_ab', carolPath, collectionRoot);
+    it('should correctly load variables of bob for carol', async () => {
+        const variables = await getEnvironmentVariables('test_ab', carolPath, collectionRoot);
 
-		// Convert to map for easier testing
-		const varMap = new Map<string, EnvironmentVariable>();
-		for (const v of variables) {
-			varMap.set(v.name, v);
-		}
+        // Convert to map for easier testing
+        const varMap = new Map<string, EnvironmentVariable>();
+        for (const v of variables) {
+            varMap.set(v.name, v);
+        }
 
-		expect(variables).toHaveLength(1);
+        expect(variables).toHaveLength(1);
 
-		// ab - defined in alice and bob; carol inherits from bob which overrides alice
-		const ab = varMap.get('ab');
-		expect(ab).toBeDefined();
-		expect(ab!.value).toBe('bob');
-		expect(ab!.source).toBe('bob');
-		expect(ab!.isInherited).toBe(true);
-		expect(ab!.isOverridden).toBe(false);
-		expect(ab!.isEditable).toBe(false);
-		expect(ab!.isPrivate).toBe(false);
-	});
+        // ab - defined in alice and bob; carol inherits from bob which overrides alice
+        const ab = varMap.get('ab');
+        expect(ab).toBeDefined();
+        expect(ab!.value).toBe('bob');
+        expect(ab!.source).toBe('bob');
+        expect(ab!.isInherited).toBe(true);
+        expect(ab!.isOverridden).toBe(false);
+        expect(ab!.isEditable).toBe(false);
+        expect(ab!.isPrivate).toBe(false);
+    });
 });
 
 describe('environmentParser - listAvailableEnvironments', () => {
@@ -350,9 +350,9 @@ describe('environmentParser - listAvailableEnvironments', () => {
     };
 
     const mockCollection: CurrentCollection = {
-		metadata: {
-			collectionName: 'Test Collection',
-		},
+        metadata: {
+            collectionName: 'Test Collection'
+        },
         path: collectionRoot,
         name: 'Test Collection',
         root: {
@@ -545,4 +545,3 @@ describe('environmentParser - listAvailableEnvironments', () => {
         expect(envMap.has('env-xbx')).toBe(false);
     });
 });
-

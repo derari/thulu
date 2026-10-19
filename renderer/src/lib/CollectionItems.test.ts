@@ -1,8 +1,16 @@
-import {describe, it, expect} from 'vitest';
-import { formatVerb, getVerbColor, flattenCollection, flattenItems } from './CollectionItemsUtils';
+import { describe, expect, it } from 'vitest';
+import { flattenCollection, flattenItems, formatVerb, getVerbColor } from './CollectionItemsUtils';
 
-const mockSection = {name: 'Test', startLineNumber: 1, endLineNumber: 2, verb: 'GET', url: 'url', isDivider: false, postScripts: []};
-const mockEnv = {folderPath: '/env', hasPublicEnv: true, hasPrivateEnv: false};
+const mockSection = {
+    name: 'Test',
+    startLineNumber: 1,
+    endLineNumber: 2,
+    verb: 'GET',
+    url: 'url',
+    isDivider: false,
+    postScripts: []
+};
+const mockEnv = { folderPath: '/env', hasPublicEnv: true, hasPrivateEnv: false };
 const mockItem = {
     title: 'File',
     filePath: '/file.http',
@@ -57,7 +65,7 @@ describe('CollectionItemsUtils', () => {
         const result = flattenCollection(mockRoot, (f) => false);
         const rootEnvironmentItem = result[0];
         expect(rootEnvironmentItem.item.title).toBe('Environments');
-        const fileItem = result.find(item => item.item.title === 'File');
+        const fileItem = result.find((item) => item.item.title === 'File');
         expect(fileItem).toBeDefined();
         expect(fileItem?.item.hasReadme).toBe(false);
     });
@@ -78,8 +86,10 @@ describe('CollectionItemsUtils', () => {
 
         const result = flattenItems([itemWithReadme, itemWithoutReadme], 0, (f) => false);
 
-        const itemWithReadmeFlat = result.find(item => item.item.title === 'FolderWithReadme');
-        const itemWithoutReadmeFlat = result.find(item => item.item.title === 'FolderWithoutReadme');
+        const itemWithReadmeFlat = result.find((item) => item.item.title === 'FolderWithReadme');
+        const itemWithoutReadmeFlat = result.find(
+            (item) => item.item.title === 'FolderWithoutReadme'
+        );
 
         expect(itemWithReadmeFlat?.item.hasReadme).toBe(true);
         expect(itemWithoutReadmeFlat?.item.hasReadme).toBe(false);
@@ -125,7 +135,7 @@ describe('CollectionItemsUtils', () => {
 
         const result = flattenItems(itemsToTest, 0, (f) => false);
 
-        result.forEach(displayItem => {
+        result.forEach((displayItem) => {
             expect(displayItem.item).toHaveProperty('hasReadme');
             expect(typeof displayItem.item.hasReadme).toBe('boolean');
         });

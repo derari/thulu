@@ -7,58 +7,58 @@ import { toggleLineComment } from './commentUtils.js';
 type RequestExecutor = (sectionLineNumber: number) => void;
 
 class PlayIconMarker extends GutterMarker {
-	constructor(
-		private sectionLineNumber: number,
-		private executeRequest: RequestExecutor
-	) {
-		super();
-	}
+    constructor(
+        private sectionLineNumber: number,
+        private executeRequest: RequestExecutor
+    ) {
+        super();
+    }
 
-	eq(other: GutterMarker): boolean {
-		return (
-			other instanceof PlayIconMarker &&
-			other.sectionLineNumber === this.sectionLineNumber &&
-			other.executeRequest === this.executeRequest
-		);
-	}
+    eq(other: GutterMarker): boolean {
+        return (
+            other instanceof PlayIconMarker &&
+            other.sectionLineNumber === this.sectionLineNumber &&
+            other.executeRequest === this.executeRequest
+        );
+    }
 
-	toDOM() {
-		const icon = document.createElement('span');
-		icon.className = 'http-play-icon';
-		icon.textContent = '▶';
-		icon.title = 'Execute request';
-		icon.style.cursor = 'pointer';
-		icon.addEventListener('click', (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			this.executeRequest(this.sectionLineNumber);
-		});
-		return icon;
-	}
+    toDOM() {
+        const icon = document.createElement('span');
+        icon.className = 'http-play-icon';
+        icon.textContent = '▶';
+        icon.title = 'Execute request';
+        icon.style.cursor = 'pointer';
+        icon.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.executeRequest(this.sectionLineNumber);
+        });
+        return icon;
+    }
 }
 
 class CommentToggleMarker extends GutterMarker {
-	constructor(
-		private isComment: boolean,
-		private lineNumber: number,
-		private currentTheme: string
-	) {
-		super();
-	}
+    constructor(
+        private isComment: boolean,
+        private lineNumber: number,
+        private currentTheme: string
+    ) {
+        super();
+    }
 
-	eq(other: GutterMarker): boolean {
-		return (
-			other instanceof CommentToggleMarker &&
-			other.isComment === this.isComment &&
-			other.lineNumber === this.lineNumber
-		);
-	}
+    eq(other: GutterMarker): boolean {
+        return (
+            other instanceof CommentToggleMarker &&
+            other.isComment === this.isComment &&
+            other.lineNumber === this.lineNumber
+        );
+    }
 
-	toDOM(view: EditorView) {
-		const button = document.createElement('button');
-		button.className = 'cm-comment-toggle-marker';
-		button.setAttribute('aria-label', this.isComment ? 'Uncomment line' : 'Comment line');
-		button.style.cssText = `
+    toDOM(view: EditorView) {
+        const button = document.createElement('button');
+        button.className = 'cm-comment-toggle-marker';
+        button.setAttribute('aria-label', this.isComment ? 'Uncomment line' : 'Comment line');
+        button.style.cssText = `
 			background: none;
 			border: none;
 			cursor: pointer;
@@ -72,187 +72,187 @@ class CommentToggleMarker extends GutterMarker {
 			transition: opacity 0.2s;
 		`;
 
-		const svg = this.createSvgIcon();
-		button.appendChild(svg);
+        const svg = this.createSvgIcon();
+        button.appendChild(svg);
 
-		button.onmouseenter = () => {
-			button.style.opacity = '1';
-		};
+        button.onmouseenter = () => {
+            button.style.opacity = '1';
+        };
 
-		button.onmouseleave = () => {
-			button.style.opacity = '0.6';
-		};
+        button.onmouseleave = () => {
+            button.style.opacity = '0.6';
+        };
 
-		button.onclick = (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			this.toggleComment(view, this.lineNumber);
-		};
+        button.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleComment(view, this.lineNumber);
+        };
 
-		return button;
-	}
+        return button;
+    }
 
-	private createSvgIcon(): SVGElement {
-		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-		svg.setAttribute('width', '16');
-		svg.setAttribute('height', '16');
-		svg.setAttribute('viewBox', '0 0 16 16');
-		svg.style.display = 'block';
+    private createSvgIcon(): SVGElement {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '16');
+        svg.setAttribute('height', '16');
+        svg.setAttribute('viewBox', '0 0 16 16');
+        svg.style.display = 'block';
 
-		if (this.isComment) {
-			const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-			circle.setAttribute('cx', '8');
-			circle.setAttribute('cy', '8');
-			circle.setAttribute('r', '6');
-			circle.setAttribute('fill', 'none');
-			circle.setAttribute('stroke', this.getColor());
-			circle.setAttribute('stroke-width', '1.5');
-			svg.appendChild(circle);
-		} else {
-			const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-			circle.setAttribute('cx', '8');
-			circle.setAttribute('cy', '8');
-			circle.setAttribute('r', '6');
-			circle.setAttribute('fill', 'none');
-			circle.setAttribute('stroke', this.getColor());
-			circle.setAttribute('stroke-width', '1.5');
-			svg.appendChild(circle);
+        if (this.isComment) {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '8');
+            circle.setAttribute('cy', '8');
+            circle.setAttribute('r', '6');
+            circle.setAttribute('fill', 'none');
+            circle.setAttribute('stroke', this.getColor());
+            circle.setAttribute('stroke-width', '1.5');
+            svg.appendChild(circle);
+        } else {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '8');
+            circle.setAttribute('cy', '8');
+            circle.setAttribute('r', '6');
+            circle.setAttribute('fill', 'none');
+            circle.setAttribute('stroke', this.getColor());
+            circle.setAttribute('stroke-width', '1.5');
+            svg.appendChild(circle);
 
-			const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-			path.setAttribute('d', 'M 5 8 L 7 10 L 11 6');
-			path.setAttribute('fill', 'none');
-			path.setAttribute('stroke', this.getColor());
-			path.setAttribute('stroke-width', '1.5');
-			path.setAttribute('stroke-linecap', 'round');
-			path.setAttribute('stroke-linejoin', 'round');
-			svg.appendChild(path);
-		}
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 5 8 L 7 10 L 11 6');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', this.getColor());
+            path.setAttribute('stroke-width', '1.5');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('stroke-linejoin', 'round');
+            svg.appendChild(path);
+        }
 
-		return svg;
-	}
+        return svg;
+    }
 
-	private getColor(): string {
-		if (this.currentTheme === 'dark') {
-			return '#c586c0';
-		}
-		return '#af00db';
-	}
+    private getColor(): string {
+        if (this.currentTheme === 'dark') {
+            return '#c586c0';
+        }
+        return '#af00db';
+    }
 
-	private toggleComment(view: EditorView, lineNumber: number) {
-		toggleLineComment(view, lineNumber);
-	}
+    private toggleComment(view: EditorView, lineNumber: number) {
+        toggleLineComment(view, lineNumber);
+    }
 }
 
 function isLineComment(line: string): boolean {
-	const trimmed = line.trim();
-	return trimmed.startsWith('#') || trimmed.startsWith('//');
+    const trimmed = line.trim();
+    return trimmed.startsWith('#') || trimmed.startsWith('//');
 }
 
 function createSectionsField(initialSections: HttpSection[] = []) {
-	return StateField.define<HttpSection[]>({
-		create() {
-			return initialSections;
-		},
-		update(sections, tr) {
-			if (tr.docChanged) {
-				const parsed = parseHttpFile(tr.newDoc.toString());
-				return parsed.sections;
-			}
-			return sections;
-		}
-	});
+    return StateField.define<HttpSection[]>({
+        create() {
+            return initialSections;
+        },
+        update(sections, tr) {
+            if (tr.docChanged) {
+                const parsed = parseHttpFile(tr.newDoc.toString());
+                return parsed.sections;
+            }
+            return sections;
+        }
+    });
 }
 
 function createRequestExecutorField(initialExecutor: RequestExecutor | null = null) {
-	return StateField.define<RequestExecutor | null>({
-		create() {
-			return initialExecutor;
-		},
-		update(executor) {
-			return executor;
-		}
-	});
+    return StateField.define<RequestExecutor | null>({
+        create() {
+            return initialExecutor;
+        },
+        update(executor) {
+            return executor;
+        }
+    });
 }
 
 function createThemeField(initialTheme: string = 'light') {
-	return StateField.define<string>({
-		create() {
-			return initialTheme;
-		},
-		update(theme) {
-			return theme;
-		}
-	});
+    return StateField.define<string>({
+        create() {
+            return initialTheme;
+        },
+        update(theme) {
+            return theme;
+        }
+    });
 }
 
 export function createHttpActionGutterExtension(
-	executor: RequestExecutor,
-	sections: HttpSection[],
-	currentTheme: string = 'light'
+    executor: RequestExecutor,
+    sections: HttpSection[],
+    currentTheme: string = 'light'
 ) {
-	const sectionsFieldWithInit = createSectionsField(sections);
-	const executorFieldWithInit = createRequestExecutorField(executor);
-	const themeFieldWithInit = createThemeField(currentTheme);
+    const sectionsFieldWithInit = createSectionsField(sections);
+    const executorFieldWithInit = createRequestExecutorField(executor);
+    const themeFieldWithInit = createThemeField(currentTheme);
 
-	return [
-		sectionsFieldWithInit,
-		executorFieldWithInit,
-		themeFieldWithInit,
-		gutter({
-			class: 'cm-http-action-gutter',
-			markers: (view: EditorView) => {
-				const builder = new RangeSetBuilder<GutterMarker>();
-				const secs = view.state.field(sectionsFieldWithInit);
-				const exec = view.state.field(executorFieldWithInit);
-				const theme = view.state.field(themeFieldWithInit);
+    return [
+        sectionsFieldWithInit,
+        executorFieldWithInit,
+        themeFieldWithInit,
+        gutter({
+            class: 'cm-http-action-gutter',
+            markers: (view: EditorView) => {
+                const builder = new RangeSetBuilder<GutterMarker>();
+                const secs = view.state.field(sectionsFieldWithInit);
+                const exec = view.state.field(executorFieldWithInit);
+                const theme = view.state.field(themeFieldWithInit);
 
-				if (!exec) {
-					return builder.finish();
-				}
+                if (!exec) {
+                    return builder.finish();
+                }
 
-				for (const section of secs) {
-					if (!section.requestStartLineNumber || !section.requestEndLineNumber) {
-						continue;
-					}
+                for (const section of secs) {
+                    if (!section.requestStartLineNumber || !section.requestEndLineNumber) {
+                        continue;
+                    }
 
-					if (!section.isDivider) {
-						const line = view.state.doc.line(section.requestStartLineNumber);
-						const marker = new PlayIconMarker(section.startLineNumber, exec);
-						builder.add(line.from, line.from, marker);
-					}
+                    if (!section.isDivider) {
+                        const line = view.state.doc.line(section.requestStartLineNumber);
+                        const marker = new PlayIconMarker(section.startLineNumber, exec);
+                        builder.add(line.from, line.from, marker);
+                    }
 
-					const startLine = section.requestStartLineNumber + 1;
-					let endLine = section.requestEndLineNumber - 1;
+                    const startLine = section.requestStartLineNumber + 1;
+                    let endLine = section.requestEndLineNumber - 1;
 
-					if (section.headers && section.headers.endLineNumber) {
-						endLine = section.headers.endLineNumber - 1;
-					}
+                    if (section.headers && section.headers.endLineNumber) {
+                        endLine = section.headers.endLineNumber - 1;
+                    }
 
-					if (section.body && section.body.startLineNumber) {
-						endLine = Math.min(endLine, section.body.startLineNumber - 1);
-					}
+                    if (section.body && section.body.startLineNumber) {
+                        endLine = Math.min(endLine, section.body.startLineNumber - 1);
+                    }
 
-					for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
-						if (lineNum > view.state.doc.lines) {
-							break;
-						}
+                    for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+                        if (lineNum > view.state.doc.lines) {
+                            break;
+                        }
 
-						const line = view.state.doc.line(lineNum);
-						const lineText = line.text.trim();
+                        const line = view.state.doc.line(lineNum);
+                        const lineText = line.text.trim();
 
-						if (lineText === '') {
-							continue;
-						}
+                        if (lineText === '') {
+                            continue;
+                        }
 
-						const isComment = isLineComment(line.text);
-						const marker = new CommentToggleMarker(isComment, lineNum, theme);
-						builder.add(line.from, line.from, marker);
-					}
-				}
+                        const isComment = isLineComment(line.text);
+                        const marker = new CommentToggleMarker(isComment, lineNum, theme);
+                        builder.add(line.from, line.from, marker);
+                    }
+                }
 
-				return builder.finish();
-			},
-			renderEmptyElements: true
-		})
-	];
+                return builder.finish();
+            },
+            renderEmptyElements: true
+        })
+    ];
 }
