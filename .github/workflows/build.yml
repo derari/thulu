@@ -1,0 +1,91 @@
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            renderer/package-lock.json
+
+      - name: Install rpm tooling
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      # postinstall also installs the renderer workspace
+      - run: npm ci
+
+      - run: npm run build
+
+      # Signing/notarization kicks in automatically when these secrets are set.
+      # Without CSC_LINK the mac app is only ad-hoc signed (required for arm64).
+      - name: Package
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          EXTRA_ARGS=()
+          if [ -z "$CSC_LINK" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            if [ "${{ matrix.platform }}" = "mac" ]; then
+              EXTRA_ARGS+=("-c.mac.identity=-")
+            fi
+          fi
+          npx electron-builder --${{ matrix.platform }} --config build.config.json --publish never "${EXTRA_ARGS[@]}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thulu-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            dist-packages/*.exe
+            dist-packages/*.zip
+            dist-packages/*.dmg
+            dist-packages/*.AppImage
+            dist-packages/*.deb
+            dist-packages/*.rpm
+            dist-packages/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: packages/*

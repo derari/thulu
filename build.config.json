@@ -74,7 +74,7 @@
     "shortcutName": "Thulu"
   },
   "portable": {
-    "artifactName": "${productName}-${version}-portable.${ext}"
+    "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
   },
   "linux": {
     "target": [
