@@ -1,6 +1,6 @@
 <script lang="ts">
     import {api} from './api';
-    import {joinPath} from './paths';
+    import * as operations from './collectionOperations';
     import {preferences} from './stores/preferences.js';
     import {currentCollection, currentCollectionName, hasCurrentCollection} from './stores/currentCollection.js';
     import {openFile} from './stores/openFile.js';
@@ -76,39 +76,12 @@
 
         showNewItemModal = false;
 
-        const rootPath = $currentCollection.path;
-
         if (newItemType === 'folder') {
-            const newFolderPath = joinPath(rootPath, name);
-            const result = await api.createFolder(newFolderPath);
-
-            if (result.success) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
+            await operations.createFolder($currentCollection.path, name);
         }
 
         if (newItemType === 'file') {
-            const fileName = `${name}.http`;
-            const newFilePath = joinPath(rootPath, fileName);
-            const initialContent = `
-### New Request
-
-GET https://example.com
-
-###
-`;
-
-            const result = await api.createFile(newFilePath, initialContent);
-
-            if (result.success) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
+            await operations.createRequestFile($currentCollection.path, name);
         }
     }
 
@@ -123,22 +96,8 @@ GET https://example.com
     }
 
     async function handleRenameConfirm(newName: string, _renameFolder?: boolean, _renameFile?: boolean) {
-        if (!$currentCollection) return;
-
         showRenameModal = false;
-
-        const result = await api.updateCollectionName(
-            $currentCollection.path,
-            newName
-        );
-
-        if (result.success) {
-            // Reload the collection with the new name
-            await currentCollection.loadCollection(
-                $currentCollection.path,
-                newName
-            );
-        }
+        await operations.renameCollection(newName);
     }
 
     function handleRenameCancel() {

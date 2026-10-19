@@ -1,21 +1,18 @@
 <script lang="ts">
-    import {api} from './api';
     // Collection items component with environment support
     import {currentCollection} from './stores/currentCollection.js';
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
     import {preferences} from './stores/preferences.js';
+    import {itemMenu} from './stores/itemMenu.js';
     import type {CollectionItem, EnvironmentConfig, HttpSection} from './collection';
-    import {ChevronRight, EllipsisVertical, Info, Settings, TriangleAlert} from 'lucide-svelte';
-    import {flattenCollection, flattenItems, formatVerb, getVerbColor} from './CollectionItemsUtils';
+    import {flattenCollection, flattenItems, formatVerb, getVerbColor, INDENT_WIDTH} from './CollectionItemsUtils';
+    import * as operations from './collectionOperations';
+    import EnvironmentRow from './EnvironmentRow.svelte';
+    import ItemRow from './ItemRow.svelte';
     import RenameModal from './RenameModal.svelte';
     import NewItemModal from './NewItemModal.svelte';
     import ReadmeView from './ReadmeView.svelte';
-    import {baseName, dirName, joinPath} from './paths';
-    import {createEnvironmentFile, deleteEnvironmentFiles} from './environmentFiles';
-
-    const INDENT_WIDTH = 15;
-    const DELETE_CONFIRMATION_TIMEOUT = 10000;
 
     let collapsed: Set<string> = new Set();
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -36,16 +33,10 @@
         }, 300);
     }
 
-    let openMenuKey: string | null = null;
-    let confirmDeleteKey: string | null = null;
-    let confirmDeleteItem: CollectionItem | null = null;
-    let confirmDeleteType: 'file' | 'folder' | 'environment' | null = null;
-    let confirmDeleteEnvironmentConfig: EnvironmentConfig | null = null;
-    let deleteTimeoutId: number | null = null;
     let showRenameModal = false;
-    let renameItem: CollectionItem | null = null;
+    let renameTarget: CollectionItem | null = null;
     let showNewItemModal = false;
-    let newItemType: 'file' | 'folder' | 'request' = 'file';
+    let newItemKind: operations.NewItemKind = 'file';
     let newItemParent: CollectionItem | null = null;
     let showReadmeView = false;
     let readmeFolderPath: string | null = null;
@@ -57,8 +48,12 @@
         return flattenCollection($currentCollection.root, isCollapsed);
     })();
 
+    function collapseKey(key: string): string {
+        return key.endsWith('.http') ? key.substring(0, key.length - 5) : key;
+    }
+
     function toggle(key: string) {
-        if (key.endsWith('.http')) key = key.substring(0, key.length - 5);
+        key = collapseKey(key);
         if (collapsed.has(key)) {
             collapsed.delete(key);
         } else {
@@ -70,8 +65,7 @@
 
     function isCollapsed(key: string | undefined): boolean {
         if (!key) return false;
-        if (key.endsWith('.http')) key = key.substring(0, key.length - 5);
-        return collapsed.has(key);
+        return collapsed.has(collapseKey(key));
     }
 
     async function handleItemClick(item: CollectionItem, section?: HttpSection) {
@@ -101,213 +95,49 @@
         // If navigation didn't happen immediately, the modal will be shown by EnvironmentsView
     }
 
-    function getItemKey(item: CollectionItem, section?: HttpSection, environmentConfig?: EnvironmentConfig): string {
-        if (section) {
-            return `${item.filePath}:${section.startLineNumber}`;
-        }
-        if (environmentConfig) {
-            return `env:${environmentConfig.folderPath}`;
-        }
-        return item.folderPath || item.filePath || item.title;
+    function isRootEnvironment(environmentConfig: EnvironmentConfig | undefined): boolean {
+        if (!environmentConfig || !$currentCollection) return true;
+        return environmentConfig.folderPath === $currentCollection.path;
     }
 
-    function toggleMenu(event: MouseEvent, key: string) {
-        event.stopPropagation();
-        if (openMenuKey === key) {
-            openMenuKey = null;
-            return;
-        }
-        openMenuKey = key;
-        confirmDeleteKey = null;
-        clearDeleteTimeout();
-    }
-
-    function handleDeleteClick(event: MouseEvent, key: string, item: CollectionItem) {
-        event.stopPropagation();
-        openMenuKey = null;
-
-        // Extract the delete type from the key if present
-        if (key.endsWith(':file')) {
-            confirmDeleteType = 'file';
-            confirmDeleteKey = key.substring(0, key.length - 5);
-        } else if (key.endsWith(':folder')) {
-            confirmDeleteType = 'folder';
-            confirmDeleteKey = key.substring(0, key.length - 7);
-        } else {
-            confirmDeleteType = item.folderPath ? 'folder' : 'file';
-            confirmDeleteKey = key;
-        }
-
-        confirmDeleteItem = item;
-        startDeleteTimeout();
-    }
-
-    function startDeleteTimeout() {
-        clearDeleteTimeout();
-        deleteTimeoutId = window.setTimeout(() => {
-            confirmDeleteKey = null;
-            confirmDeleteItem = null;
-            confirmDeleteType = null;
-            confirmDeleteEnvironmentConfig = null;
-            deleteTimeoutId = null;
-        }, DELETE_CONFIRMATION_TIMEOUT);
-    }
-
-    function clearDeleteTimeout() {
-        if (deleteTimeoutId !== null) {
-            window.clearTimeout(deleteTimeoutId);
-            deleteTimeoutId = null;
-        }
-    }
-
-    async function confirmDelete(event: MouseEvent) {
-        event.stopPropagation();
-        clearDeleteTimeout();
-
-        if (confirmDeleteType === 'environment') {
-            if (!confirmDeleteEnvironmentConfig) return;
-
-            const envConfig = confirmDeleteEnvironmentConfig;
-
-            confirmDeleteKey = null;
-            confirmDeleteType = null;
-            confirmDeleteEnvironmentConfig = null;
-
-            const allSucceeded = await deleteEnvironmentFiles(envConfig);
-
-            if (allSucceeded && $currentCollection) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
-            return;
-        }
-
-        if (!confirmDeleteItem) return;
-
-        const pathToDelete = confirmDeleteType === 'file'
-            ? confirmDeleteItem.filePath
-            : confirmDeleteItem.folderPath;
-
-        if (!pathToDelete) return;
-
-        confirmDeleteKey = null;
-        confirmDeleteItem = null;
-        confirmDeleteType = null;
-
-        const result = await api.deletePath(pathToDelete);
-
-        if (result.success) {
-            if ($openFile && $openFile.filePath === pathToDelete) {
-                openFile.close();
-            }
-
-            if ($currentCollection) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
-        }
-    }
-
-    function handleClickOutside() {
-        if (openMenuKey !== null) {
-            openMenuKey = null;
-        }
-    }
-
-    function handleRenameClick(event: MouseEvent, item: CollectionItem) {
-        event.stopPropagation();
-        openMenuKey = null;
-        renameItem = item;
+    function handleRename(item: CollectionItem) {
+        renameTarget = item;
         showRenameModal = true;
     }
 
-    function getCurrentName(item: CollectionItem): string {
-        // When there's both a file and folder, use the file name (without extension)
-        // When there's only a folder, use the folder name
-        // When there's only a file, use the file name (without extension)
-        const targetPath = item.filePath || item.folderPath;
-        if (!targetPath) return '';
-        const fullName = baseName(targetPath);
-
-        // For files (whether alone or with a folder), strip the extension
-        if (item.filePath) {
-            const lastDot = fullName.lastIndexOf('.');
-            if (lastDot > 0) {
-                return fullName.substring(0, lastDot);
-            }
-        }
-
-        return fullName;
-    }
-
-    function getExtension(filePath: string): string {
-        const name = baseName(filePath);
-        const lastDot = name.lastIndexOf('.');
-        if (lastDot > 0) {
-            return name.substring(lastDot);
-        }
-        return '';
-    }
-
     async function handleRenameConfirm(newName: string, renameFolder: boolean, renameFile: boolean) {
-        if (!renameItem) return;
+        if (!renameTarget) return;
 
         showRenameModal = false;
-
-        const operations: Promise<{ success: boolean; error?: string }>[] = [];
-
-        if (renameFile && renameItem.filePath) {
-            const dir = dirName(renameItem.filePath);
-            const extension = getExtension(renameItem.filePath);
-            const newNameWithExtension = newName + extension;
-            const newPath = joinPath(dir, newNameWithExtension);
-            operations.push(api.renamePath(renameItem.filePath, newPath));
-        }
-
-        if (renameFolder && renameItem.folderPath) {
-            const dir = dirName(renameItem.folderPath);
-            const newPath = joinPath(dir, newName);
-            operations.push(api.renamePath(renameItem.folderPath, newPath));
-        }
-
-        const results = await Promise.all(operations);
-        const allSucceeded = results.every(r => r.success);
-
-        if (allSucceeded) {
-            if ($openFile && renameItem.filePath && $openFile.filePath === renameItem.filePath) {
-                openFile.close();
-            }
-
-            if ($currentCollection) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
-        }
-
-        renameItem = null;
+        await operations.renameItem(renameTarget, newName, renameFolder, renameFile);
+        renameTarget = null;
     }
 
     function handleRenameCancel() {
         showRenameModal = false;
-        renameItem = null;
+        renameTarget = null;
     }
 
-    function handleNewFolderClick(event: MouseEvent, item: CollectionItem) {
-        event.stopPropagation();
-        openMenuKey = null;
+    function handleNewItem(kind: operations.NewItemKind, item: CollectionItem) {
         newItemParent = item;
-        newItemType = 'folder';
+        newItemKind = kind;
         showNewItemModal = true;
     }
 
-    function handleInfoClick(event: MouseEvent, folderPath: string, itemName: string) {
-        event.stopPropagation();
+    async function handleNewItemConfirm(name: string, createNewFile?: boolean) {
+        if (!newItemParent || !$currentCollection) return;
+
+        showNewItemModal = false;
+        await operations.createItem(newItemKind, newItemParent, name, createNewFile);
+        newItemParent = null;
+    }
+
+    function handleNewItemCancel() {
+        showNewItemModal = false;
+        newItemParent = null;
+    }
+
+    function handleShowReadme(folderPath: string, itemName: string) {
         readmeFolderPath = folderPath;
         readmeName = itemName;
         showReadmeView = true;
@@ -319,127 +149,10 @@
         readmeName = 'README';
     }
 
-    function handleNewFileClick(event: MouseEvent, item: CollectionItem) {
-        event.stopPropagation();
-        openMenuKey = null;
-        newItemParent = item;
-        newItemType = 'file';
-        showNewItemModal = true;
-    }
-
-    function handleNewRequestClick(event: MouseEvent, item: CollectionItem) {
-        event.stopPropagation();
-        openMenuKey = null;
-        newItemParent = item;
-        newItemType = 'request';
-        showNewItemModal = true;
-    }
-
-    async function handleNewEnvironmentClick(event: MouseEvent, item: CollectionItem) {
-        event.stopPropagation();
-        openMenuKey = null;
-
-        if (!$currentCollection) return;
-
-        const targetFolder = item.folderPath || dirName(item.filePath || '');
-        const result = await createEnvironmentFile(targetFolder);
-
-        if (result.success) {
-            await currentCollection.loadCollection(
-                $currentCollection.path,
-                $currentCollection.name
-            );
-        }
-    }
-
-    async function handleNewItemConfirm(name: string, createNewFile?: boolean) {
-        if (!newItemParent || !$currentCollection) return;
-
-        showNewItemModal = false;
-
-        let parentPath = newItemParent.folderPath || dirName(newItemParent.filePath || '');
-
-        if (newItemType === 'folder') {
-            const newFolderPath = joinPath(parentPath, name);
-            const result = await api.createFolder(newFolderPath);
-
-            if (result.success) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
-        }
-
-        if (newItemType === 'request') {
-            // Adjust variables for the file branch to use
-            if (!createNewFile) {
-                // Use folder name as the file name
-                name = baseName(newItemParent.folderPath || dirName(newItemParent.filePath || ''));
-                // Adjust parentPath to be the parent of the current folder
-                parentPath = dirName(newItemParent.folderPath || '');
-                // Set the parent to have a folderPath so file branch uses it directly
-                newItemParent = { ...newItemParent, folderPath: parentPath };
-            }
-            // Convert request type to file type so file branch handles it
-            newItemType = 'file';
-        }
-
-        if (newItemType === 'file') {
-            let targetFolder = parentPath;
-
-            if (!newItemParent.folderPath) {
-                const parentItemName = getCurrentName(newItemParent);
-                targetFolder = joinPath(parentPath, parentItemName);
-                await api.createFolder(targetFolder);
-            }
-
-            const fileName = `${name}.http`;
-            const newFilePath = joinPath(targetFolder, fileName);
-            const initialContent = `
-### New Request
-
-GET https://example.com
-
-###
-`;
-
-            const result = await api.createFile(newFilePath, initialContent);
-
-            if (result.success) {
-                await currentCollection.loadCollection(
-                    $currentCollection.path,
-                    $currentCollection.name
-                );
-            }
-        }
-
-        newItemParent = null;
-    }
-
-    function handleNewItemCancel() {
-        showNewItemModal = false;
-        newItemParent = null;
-    }
-
-    function handleDeleteEnvironment(event: MouseEvent, itemKey: string, environmentConfig: EnvironmentConfig) {
-        event.stopPropagation();
-        openMenuKey = null;
-        confirmDeleteKey = itemKey;
-        confirmDeleteType = 'environment';
-        confirmDeleteEnvironmentConfig = environmentConfig;
-        startDeleteTimeout();
-    }
-
-    function isRootEnvironment(environmentConfig: EnvironmentConfig | undefined): boolean {
-        if (!environmentConfig || !$currentCollection) return true;
-        return environmentConfig.folderPath === $currentCollection.path;
-    }
-
     export {formatVerb, getVerbColor, flattenCollection, flattenItems};
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window on:click={() => itemMenu.close()} />
 
 <div class="collection-items">
     {#if $currentCollection}
@@ -462,219 +175,32 @@ GET https://example.com
                         <div class="divider"
                              style="margin-left: {(indent * INDENT_WIDTH) + 8}px; margin-right: 8px;"></div>
                     {:else if isEnvironment}
-                        {@const itemKey = getItemKey(item, section, environmentConfig)}
-                        {@const isRoot = isRootEnvironment(environmentConfig)}
-                        <div
-                                class="item environment-item"
-                                class:clickable={!!environmentConfig}
-                                style="padding-left: {indent * INDENT_WIDTH}px;"
-                                role="button"
-                                tabindex="0"
-                                on:click={() => environmentConfig && handleEnvironmentClick(environmentConfig)}
-                                on:keydown={(e) => { if (e.key === 'Enter' && environmentConfig) handleEnvironmentClick(environmentConfig) }}
-                        >
-                            <span class="environment-icon">
-                                <Settings size={16}/>
-                            </span>
-                            <span class="item-title">{item.title}</span>
-
-                            {#if !isRoot && environmentConfig}
-                                <div class="item-actions">
-                                    {#if confirmDeleteKey === itemKey}
-                                        <button
-                                                class="action-button confirm-delete-button"
-                                                on:click={(e) => confirmDelete(e)}
-                                                title="Confirm delete"
-                                                aria-label="Confirm delete"
-                                        >
-                                            <TriangleAlert size={16}/>
-                                        </button>
-                                    {:else}
-                                        <button
-                                                class="action-button menu-button"
-                                                on:click={(e) => toggleMenu(e, itemKey)}
-                                                title="More options"
-                                                aria-label="More options"
-                                        >
-                                            <EllipsisVertical size={16}/>
-                                        </button>
-
-                                        {#if openMenuKey === itemKey}
-                                            <div class="dropdown-menu">
-                                                <button
-                                                        class="dropdown-item delete-item"
-                                                        on:click={(e) => handleDeleteEnvironment(e, itemKey, environmentConfig)}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        {/if}
-                                    {/if}
-                                </div>
-                            {/if}
-                        </div>
+                        <EnvironmentRow
+                                title={item.title}
+                                {indent}
+                                {environmentConfig}
+                                isRoot={isRootEnvironment(environmentConfig)}
+                                on:open={(e) => handleEnvironmentClick(e.detail)}
+                        />
                     {:else}
-                        {@const itemKey = getItemKey(item, section)}
-                        <div
-                                class="item"
-                                class:clickable={!!item.filePath}
-                                style="padding-left: {indent * INDENT_WIDTH}px;"
-                                role="button"
-                                tabindex={item.filePath ? 0 : -1}
-                                on:click={() => handleItemClick(item, section)}
-                                on:keydown={(e) => e.key === 'Enter' && handleItemClick(item, section)}
-                        >
-                            {#if isSection && section?.verb}
-                                <span class="verb-badge" style="color: {getVerbColor(section.verb)}">
-                                    {formatVerb(section.verb)}
-                                </span>
-                            {:else if hasChildren}
-                                <span
-                                        class="chevron"
-                                        class:collapsed={isCollapsed(folderPath || fileKey)}
-                                        role="button"
-                                        tabindex="0"
-                                        on:click|stopPropagation={() => {
-                                            toggle(folderPath || fileKey || '');
-                                        }}
-                                        on:keydown|stopPropagation={(e) => {
-                                            if (e.key === 'Enter') {
-                                                toggle(folderPath || fileKey || '');
-                                            }
-                                        }}
-                                >
-                                    <ChevronRight size={16}/>
-                                </span>
-                            {:else}
-                                <span class="chevron-spacer"></span>
-                            {/if}
-                            <span class="item-title">{item.title}</span>
-
-                            {#if !isSection && (item.folderPath || item.filePath)}
-                                {@const envKey = `${itemKey}:env`}
-                                {@const hasInlineEnv = !!environmentConfig && !isRootEnvironment(environmentConfig) && !!item.folderPath && !item.filePath}
-                                <div class="item-actions">
-                                    {#if item.hasReadme}
-                                        <button
-                                                class="action-button info-button"
-                                                on:click={(e) => handleInfoClick(e, item.folderPath || '', item.title)}
-                                                title="Show README"
-                                                aria-label="Show README"
-                                        >
-                                            <Info size={16}/>
-                                        </button>
-                                    {/if}
-
-                                    {#if hasInlineEnv}
-                                        {#if confirmDeleteKey === envKey}
-                                            <button
-                                                    class="action-button confirm-delete-button"
-                                                    on:click={(e) => confirmDelete(e)}
-                                                    title="Confirm delete environment"
-                                                    aria-label="Confirm delete environment"
-                                            >
-                                                <TriangleAlert size={16}/>
-                                            </button>
-                                        {:else}
-                                            <button
-                                                    class="action-button environment-button"
-                                                    on:click={(e) => { e.stopPropagation(); handleEnvironmentClick(environmentConfig!) }}
-                                                    title="Open Environment"
-                                                    aria-label="Open Environment"
-                                            >
-                                                <Settings size={16}/>
-                                            </button>
-                                        {/if}
-                                    {/if}
-
-                                    {#if confirmDeleteKey === itemKey}
-                                        <button
-                                                class="action-button confirm-delete-button"
-                                                on:click={(e) => confirmDelete(e)}
-                                                title="Confirm delete"
-                                                aria-label="Confirm delete"
-                                        >
-                                            <TriangleAlert size={16}/>
-                                        </button>
-                                    {:else}
-                                        <button
-                                                class="action-button menu-button"
-                                                on:click={(e) => toggleMenu(e, itemKey)}
-                                                title="More options"
-                                                aria-label="More options"
-                                        >
-                                            <EllipsisVertical size={16}/>
-                                        </button>
-
-                                        {#if openMenuKey === itemKey}
-                                            <div class="dropdown-menu">
-                                                <button
-                                                        class="dropdown-item"
-                                                        on:click={(e) => handleNewFolderClick(e, item)}
-                                                >
-                                                    New Folder
-                                                </button>
-                                                {#if item.folderPath && !item.filePath}
-                                                    <button
-                                                            class="dropdown-item"
-                                                            on:click={(e) => handleNewRequestClick(e, item)}
-                                                    >
-                                                        New Request
-                                                    </button>
-                                                {:else}
-                                                    <button
-                                                            class="dropdown-item"
-                                                            on:click={(e) => handleNewFileClick(e, item)}
-                                                    >
-                                                        New File
-                                                    </button>
-                                                {/if}
-                                                {#if item.folderPath && !item.environments && item.items && item.items.length > 0}
-                                                    <button
-                                                            class="dropdown-item"
-                                                            on:click={(e) => handleNewEnvironmentClick(e, item)}
-                                                    >
-                                                        New Environment
-                                                    </button>
-                                                {/if}
-                                                <div class="dropdown-separator"></div>
-                                                <button
-                                                        class="dropdown-item"
-                                                        on:click={(e) => handleRenameClick(e, item)}
-                                                >
-                                                    Rename
-                                                </button>
-                                                <div class="dropdown-separator"></div>
-                                                {#if hasInlineEnv}
-                                                    <button
-                                                            class="dropdown-item delete-item"
-                                                            on:click={(e) => handleDeleteEnvironment(e, envKey, environmentConfig!)}
-                                                    >
-                                                        Delete Environment
-                                                    </button>
-                                                {/if}
-                                                {#if item.filePath}
-                                                    <button
-                                                            class="dropdown-item delete-item"
-                                                            on:click={(e) => handleDeleteClick(e, `${itemKey}:file`, item)}
-                                                    >
-                                                        Delete {#if item.folderPath}All Requests{/if}
-                                                    </button>
-                                                {/if}
-                                                {#if item.folderPath}
-                                                    <button
-                                                            class="dropdown-item delete-item"
-                                                            on:click={(e) => handleDeleteClick(e, `${itemKey}:folder`, item)}
-                                                    >
-                                                        Delete {#if item.filePath}All Subgroups{/if}
-                                                    </button>
-                                                {/if}
-                                            </div>
-                                        {/if}
-                                    {/if}
-                                </div>
-                            {/if}
-                        </div>
+                        <ItemRow
+                                {item}
+                                {section}
+                                {indent}
+                                {isSection}
+                                {hasChildren}
+                                {environmentConfig}
+                                collapsed={isCollapsed(folderPath || fileKey)}
+                                toggleKey={folderPath || fileKey || ''}
+                                isRootEnvironment={isRootEnvironment(environmentConfig)}
+                                on:select={(e) => handleItemClick(e.detail.item, e.detail.section)}
+                                on:toggle={(e) => toggle(e.detail)}
+                                on:readme={(e) => handleShowReadme(e.detail.folderPath, e.detail.title)}
+                                on:newItem={(e) => handleNewItem(e.detail.kind, e.detail.item)}
+                                on:newEnvironment={(e) => operations.createEnvironmentFor(e.detail)}
+                                on:rename={(e) => handleRename(e.detail)}
+                                on:openEnvironment={(e) => handleEnvironmentClick(e.detail)}
+                        />
                     {/if}
                 {/each}
             </div>
@@ -684,11 +210,11 @@ GET https://example.com
     {/if}
 </div>
 
-{#if showRenameModal && renameItem}
+{#if showRenameModal && renameTarget}
     <RenameModal
-        currentName={getCurrentName(renameItem)}
-        showFolderCheckbox={!!renameItem.folderPath}
-        showFileCheckbox={!!renameItem.filePath}
+        currentName={operations.itemName(renameTarget)}
+        showFolderCheckbox={!!renameTarget.folderPath}
+        showFileCheckbox={!!renameTarget.filePath}
         onConfirm={handleRenameConfirm}
         onCancel={handleRenameCancel}
     />
@@ -696,7 +222,7 @@ GET https://example.com
 
 {#if showNewItemModal}
     <NewItemModal
-        itemType={newItemType}
+        itemType={newItemKind}
         onConfirm={handleNewItemConfirm}
         onCancel={handleNewItemCancel}
     />
@@ -731,193 +257,10 @@ GET https://example.com
         flex-direction: column;
     }
 
-    .item {
-
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: var(--text-primary);
-        position: relative;
-    }
-
-    .item-title {
-        padding: 0.35rem 0;
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .item.clickable {
-        cursor: pointer;
-    }
-
-    .item.clickable:hover {
-        background: var(--sidebar-item-hover);
-    }
-
-    .environment-item {
-        color: var(--text-secondary);
-        font-style: italic;
-    }
-
-    .environment-item.clickable:hover {
-        background: var(--sidebar-item-hover);
-    }
-
-    .environment-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-secondary);
-    }
-
     .divider {
         height: 3px;
         background: var(--border-default);
         margin: 0.1rem 0;
         opacity: 0.5;
-    }
-
-    .chevron {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: transform 0.2s ease;
-        transform: rotate(90deg);
-    }
-
-    .chevron.collapsed {
-        transform: rotate(0deg);
-    }
-
-    .chevron:hover {
-        color: var(--text-primary);
-    }
-
-    .chevron-spacer {
-        display: inline-block;
-        width: 16px;
-    }
-
-    .verb-badge {
-        font-size: 0.55rem;
-        font-weight: 600;
-        padding: 2px 4px 0 4px;
-        border: 1px solid currentColor;
-        border-radius: 3px;
-        font-family: 'Monaspace Neon', 'Consolas', 'Monaco', 'Courier New', monospace;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 32px;
-        opacity: 0.8;
-    }
-
-    .item-actions {
-        margin-left: auto;
-        position: relative;
-        display: flex;
-        align-items: center;
-    }
-
-    .action-button {
-        background: transparent;
-        border: none;
-        color: var(--text-secondary);
-        cursor: pointer;
-        padding: 0.25rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 3px;
-        transition: all 0.2s;
-    }
-
-    .action-button:hover {
-        background: var(--bg-tertiary);
-        color: var(--text-primary);
-    }
-
-    .confirm-delete-button {
-        color: var(--interactive-danger);
-        animation: pulse 0.5s ease-in-out;
-    }
-
-    .confirm-delete-button:hover {
-        background: var(--interactive-danger);
-        color: white;
-    }
-
-    .info-button {
-        color: var(--text-secondary);
-    }
-
-    .info-button:hover {
-        color: var(--text-primary);
-    }
-
-    .environment-button {
-        color: var(--text-secondary);
-    }
-
-    .environment-button:hover {
-        color: var(--text-primary);
-    }
-
-    @keyframes pulse {
-        0%, 100% {
-            transform: scale(1);
-        }
-        50% {
-            transform: scale(1.1);
-        }
-    }
-
-    .dropdown-menu {
-        position: absolute;
-        top: 100%;
-        right: -10px;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-default);
-        border-radius: 4px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        z-index: 100;
-        min-width: 140px;
-        margin-top: 0.25rem;
-    }
-
-    .dropdown-item {
-        width: 100%;
-        background: transparent;
-        border: none;
-        color: var(--text-primary);
-        padding: 0.5rem 0.75rem;
-        text-align: left;
-        cursor: pointer;
-        font-size: 0.75rem;
-        transition: background 0.2s;
-    }
-
-    .dropdown-item:hover {
-        background: var(--bg-tertiary);
-    }
-
-    .dropdown-item.delete-item {
-        color: var(--interactive-danger);
-    }
-
-    .dropdown-item.delete-item:hover {
-        background: var(--interactive-danger);
-        color: white;
-    }
-
-    .dropdown-separator {
-        height: 1px;
-        background: var(--border-default);
-        margin: 0.25rem 0;
     }
 </style>

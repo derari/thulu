@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { derived, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
 import type { CollectionItem, CurrentCollection } from '../collection';
 import { parseHttpFile } from '$lib/editor/httpParser.js';
 import { scanCollectionRoot } from '../collectionScanner.js';
@@ -75,6 +75,14 @@ function createCurrentCollectionStore() {
             }
 
             set(null);
+        },
+
+        /** Scans the current collection again, e.g. after files were created, renamed or deleted. */
+        async reload() {
+            const collection = get({ subscribe });
+            if (collection) {
+                await this.loadCollection(collection.path, collection.name);
+            }
         },
 
         async refreshFile(filePath: string) {

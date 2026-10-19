@@ -2,6 +2,23 @@ import type { CollectionItem, EnvironmentConfig, HttpSection } from './collectio
 
 export { getVerbColor, formatVerb } from './editor/httpColors.js';
 
+export const INDENT_WIDTH = 15;
+
+/** Identifies a row of the tree: a request, an environment, or a folder or file. */
+export function getItemKey(
+    item: CollectionItem,
+    section?: HttpSection,
+    environmentConfig?: EnvironmentConfig
+): string {
+    if (section) {
+        return `${item.filePath}:${section.startLineNumber}`;
+    }
+    if (environmentConfig) {
+        return `env:${environmentConfig.folderPath}`;
+    }
+    return item.folderPath || item.filePath || item.title;
+}
+
 export interface DisplayItem {
     item: CollectionItem;
     indent: number;
