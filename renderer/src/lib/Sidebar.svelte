@@ -1,5 +1,6 @@
 <script lang="ts">
-    import {onMount} from 'svelte';
+    import {joinPath} from './paths';
+    import {preferences} from './stores/preferences.js';
     import {currentCollection, currentCollectionName, hasCurrentCollection} from './stores/currentCollection.js';
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
@@ -47,12 +48,7 @@
         isResizing = false;
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
-        window.electronAPI.savePreferences({sidebarWidth: width});
-    }
-
-    function joinPath(dir: string, name: string): string {
-        const normalizedDir = dir.replace(/\\/g, '/');
-        return `${normalizedDir}/${name}`.replace(/\\/g, '/');
+        preferences.update({sidebarWidth: width});
     }
 
     function toggleHeaderMenu(event: MouseEvent) {
@@ -174,14 +170,13 @@ GET https://example.com
         readmeName = 'README';
     }
 
-    onMount(() => {
-        window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
-            if (preferences.sidebarWidth && preferences.sidebarWidth >= 50) {
-                width = preferences.sidebarWidth;
-            }
-        });
-        window.electronAPI.requestPreferences();
-    });
+    let widthLoaded = false;
+    $: if ($preferences && !widthLoaded) {
+        widthLoaded = true;
+        if ($preferences.sidebarWidth && $preferences.sidebarWidth >= 50) {
+            width = $preferences.sidebarWidth;
+        }
+    }
 </script>
 
 <svelte:window on:click={handleClickOutside} />

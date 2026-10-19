@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {onMount} from 'svelte';
+    import {preferences} from './stores/preferences.js';
 
     export var onClose: () => void;
 
@@ -9,23 +9,16 @@
         {value: 'light', label: 'Light'}
     ];
 
-    var selectedAppearance: string = 'system';
+    var selectedAppearance: string = $preferences?.appearance ?? 'system';
 
     function savePreferences() {
-        window.electronAPI.savePreferences({appearance: selectedAppearance} as Preferences);
+        preferences.update({appearance: selectedAppearance as Preferences['appearance']});
         onClose();
     }
 
     function cancelPreferences() {
         onClose();
     }
-
-    onMount(() => {
-        window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
-            selectedAppearance = preferences.appearance ?? 'system';
-        });
-        window.electronAPI.requestPreferences();
-    });
 </script>
 
 <div class="modal-backdrop">

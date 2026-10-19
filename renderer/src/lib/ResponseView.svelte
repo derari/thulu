@@ -18,6 +18,8 @@
     import {createBodyLinkExtension} from './editor/bodyLinkWidget.js';
     import {isBinaryContentType} from './editor/contentTypeUtils.js';
     import HistoryView from './HistoryView.svelte';
+    import {getHeader} from './headers';
+    import {preferences} from './stores/preferences.js';
 
     export let orientation: 'horizontal' | 'vertical' = 'vertical';
 
@@ -147,7 +149,7 @@
         }
 
         const req = response.resolvedRequest;
-        const reqContentType = req.headers['content-type'] || req.headers['Content-Type'] || null;
+        const reqContentType = getHeader(req.headers, 'content-type') || null;
         const reqBodySize = req.body ? new TextEncoder().encode(req.body).length : 0;
         const reqIsBinary = isBinaryContentType(reqContentType);
         const showReqWidget = requestBodyLink.shouldShowWidget(reqIsBinary, reqBodySize);
@@ -258,7 +260,7 @@
         const isNewResponse = previousResponseId !== currentResponseId;
         previousResponseId = currentResponseId;
 
-        contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
+        contentType = getHeader(response.headers, 'content-type') || '';
         const charsetMatch = contentType.match(/charset=([^\s;]+)/i);
         const charset = charsetMatch ? charsetMatch[1] : 'utf-8';
         const bytes = Uint8Array.from(atob(response.bodyBytes), c => c.charCodeAt(0));
@@ -396,26 +398,27 @@
         activeTab = 'response';
     }
 
+    let sizeLoaded = false;
+    $: if ($preferences && !sizeLoaded) {
+        sizeLoaded = true;
+        if (orientation === 'vertical' && $preferences.responseWidth && $preferences.responseWidth >= 200) {
+            size = $preferences.responseWidth;
+        }
+        if (orientation === 'horizontal' && $preferences.responseHeight && $preferences.responseHeight >= 200) {
+            size = $preferences.responseHeight;
+        }
+    }
+
     onMount(() => {
         createEditor();
         createRequestEditor();
 
-        window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
-            if (orientation === 'vertical' && preferences.responseWidth && preferences.responseWidth >= 200) {
-                size = preferences.responseWidth;
-            }
-            if (orientation === 'horizontal' && preferences.responseHeight && preferences.responseHeight >= 200) {
-                size = preferences.responseHeight;
-            }
-        });
-        window.electronAPI.requestPreferences();
-
         window.addEventListener('beforeunload', () => {
             if (orientation === 'vertical') {
-                window.electronAPI.savePreferences({responseWidth: size});
+                preferences.update({responseWidth: size});
             }
             if (orientation === 'horizontal') {
-                window.electronAPI.savePreferences({responseHeight: size});
+                preferences.update({responseHeight: size});
             }
         });
     });

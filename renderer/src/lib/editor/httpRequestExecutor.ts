@@ -1,6 +1,7 @@
 import type { HttpSection, ParsedHttpFile } from './httpParser';
 import type { PostScript } from '../collection';
 import { getEnvironmentVariablesMap } from '../environmentParser';
+import { getHeader } from '../headers';
 
 export interface RequestExecutionParams {
     parsedFile: ParsedHttpFile;
@@ -70,7 +71,7 @@ async function executePostScripts(
     responseHeaders: Record<string, string>
 ): Promise<ScriptExecutionResult[]> {
     const results: ScriptExecutionResult[] = [];
-    const contentType = responseHeaders['content-type'] || '';
+    const contentType = getHeader(responseHeaders, 'content-type') || '';
 
     for (const postScript of postScripts) {
         const code = extractScriptCode(lines, postScript);
@@ -273,7 +274,7 @@ function getOptionValue(
 }
 
 function decodeResponseBody(base64Body: string, headers: Record<string, string>): string {
-    const contentType = headers['content-type'] || '';
+    const contentType = getHeader(headers, 'content-type') || '';
     const charsetMatch = contentType.match(/charset=([^\s;]+)/i);
     const charset = charsetMatch ? charsetMatch[1] : 'utf-8';
 

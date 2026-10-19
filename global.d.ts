@@ -73,9 +73,9 @@ declare global {
                 globalVariableChanges?: Record<string, string>
             }>;
             onPreferencesOpen: (callback: () => void) => void;
-            onPreferencesLoad: (callback: (preferences: Preferences) => void) => void;
+            onPreferencesLoad: (callback: (preferences: Preferences) => void) => () => void;
             requestPreferences: () => void;
-            savePreferences: (preferences: Preferences) => void;
+            savePreferences: (preferences: Partial<Preferences>) => void;
             saveHistory: (params: {
                 collectionPath: string;
                 timestamp: string;

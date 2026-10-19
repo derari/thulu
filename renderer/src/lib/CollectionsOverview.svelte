@@ -1,55 +1,47 @@
 <script lang="ts">
-    import {onMount} from 'svelte';
     import {currentCollection} from './stores/currentCollection.js';
+    import {preferences} from './stores/preferences.js';
 
-    var collections: CollectionMetaData[] = [];
-    var currentCollectionPath: string | undefined;
+    $: collections = $preferences?.collections ?? [];
+    $: currentCollectionPath = $preferences?.currentCollectionPath;
+
+    let requestedPath: string | undefined;
+
+    function openCollection(collectionPath: string, collectionName: string) {
+        requestedPath = collectionPath;
+        return currentCollection.loadCollection(collectionPath, collectionName);
+    }
+
+    // Opens the collection the preferences point at, e.g. after File > Open Collection or on startup
+    $: syncCurrentCollection($preferences);
+
+    function syncCurrentCollection(prefs: Preferences | null) {
+        const path = prefs?.currentCollectionPath;
+        if (!path || path === requestedPath) return;
+        const entry = prefs?.collections?.find(c => c.path === path);
+        if (entry) openCollection(entry.path, entry.name);
+    }
 
     function handleCollectionClick(collectionPath: string, collectionName: string) {
-        window.electronAPI.savePreferences({currentCollectionPath: collectionPath});
-        currentCollection.loadCollection(collectionPath, collectionName);
+        preferences.update({currentCollectionPath: collectionPath});
+        openCollection(collectionPath, collectionName);
     }
 
     function handleRemoveCollection(event: MouseEvent, collectionPath: string) {
         event.stopPropagation();
 
-        if (currentCollectionPath === collectionPath) {
-            currentCollection.clear();
-            currentCollectionPath = undefined;
-        }
-
-        const updatedCollections = collections.filter(c => c.path !== collectionPath);
-        collections = updatedCollections;
-
         const saveData: Partial<Preferences> = {
-            collections: updatedCollections
+            collections: collections.filter(c => c.path !== collectionPath)
         };
 
         if (currentCollectionPath === collectionPath) {
+            currentCollection.clear();
+            requestedPath = undefined;
             saveData.currentCollectionPath = undefined;
         }
 
-        window.electronAPI.savePreferences(saveData);
+        preferences.update(saveData);
     }
-
-    onMount(() => {
-        window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
-            if (preferences.collections) {
-                collections = preferences.collections;
-            }
-            currentCollectionPath = preferences.currentCollectionPath;
-
-            if (preferences.currentCollectionPath && preferences.collections) {
-                const current = preferences.collections.find(
-                    c => c.path === preferences.currentCollectionPath
-                );
-                if (current) {
-                    currentCollection.loadCollection(current.path, current.name);
-                }
-            }
-        });
-        window.electronAPI.requestPreferences();
-    });
 </script>
 
 <div class="collections-overview">

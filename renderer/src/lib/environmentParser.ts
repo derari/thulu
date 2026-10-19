@@ -1,4 +1,5 @@
 import type { CollectionItem, CurrentCollection, EnvironmentConfig } from './collection';
+import { baseName, dirName, joinPath, normalizePath } from './paths';
 
 export interface EnvironmentVariables {
     [key: string]: string;
@@ -17,23 +18,6 @@ export interface AvailableEnvironment {
 interface FoundEnvironmentConfig {
     folderPath: string;
     environments: EnvironmentConfig;
-}
-
-function joinPath(basePath: string, fileName: string): string {
-    return `${basePath}${basePath.endsWith('/') || basePath.endsWith('\\') ? '' : '/'}${fileName}`;
-}
-
-function getBaseName(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/');
-    const parts = normalized.split('/');
-    return parts[parts.length - 1] || '';
-}
-
-function getParentPath(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/');
-    const parts = normalized.split('/');
-    parts.pop();
-    return parts.join('/');
 }
 
 export interface EnvironmentVariable {
@@ -70,8 +54,8 @@ function findEnvironmentConfigs(
     collectionRoot: string,
     result: FoundEnvironmentConfig[] = []
 ): FoundEnvironmentConfig[] {
-    const normalizedFolderPath = folderPath.replace(/\\/g, '/');
-    const normalizedRoot = collectionRoot.replace(/\\/g, '/');
+    const normalizedFolderPath = normalizePath(folderPath);
+    const normalizedRoot = normalizePath(collectionRoot);
 
     function findConfigForPath(
         items: CollectionItem[],
@@ -82,7 +66,7 @@ function findEnvironmentConfigs(
                 continue;
             }
 
-            const itemPath = item.folderPath.replace(/\\/g, '/');
+            const itemPath = normalizePath(item.folderPath);
 
             if (itemPath === targetPath && item.environments) {
                 return {
@@ -115,7 +99,7 @@ function findEnvironmentConfigs(
             break;
         }
 
-        const parentPath = getParentPath(currentPath);
+        const parentPath = dirName(currentPath);
         if (parentPath === currentPath || parentPath.length < normalizedRoot.length) {
             break;
         }
@@ -133,8 +117,8 @@ export async function listAvailableEnvironments(
     const environments: AvailableEnvironment[] = [];
     const seenEnvironments = new Set<string>();
 
-    const normalizedRoot = collection.path.replace(/\\/g, '/');
-    const normalizedFolderPath = folderPath.replace(/\\/g, '/');
+    const normalizedRoot = normalizePath(collection.path);
+    const normalizedFolderPath = normalizePath(folderPath);
 
     // Find all environment configs in the collection
     const envConfigs = findEnvironmentConfigs([collection.root], folderPath, collection.path);
@@ -142,7 +126,7 @@ export async function listAvailableEnvironments(
     // Configs are already in depth-first order (deepest first) from findEnvironmentConfigs
     // Process environment configs from current folder up to root
     for (const config of envConfigs) {
-        const configPath = config.folderPath.replace(/\\/g, '/');
+        const configPath = normalizePath(config.folderPath);
 
         const isFromCurrentFolder = configPath === normalizedFolderPath;
 
@@ -157,7 +141,7 @@ export async function listAvailableEnvironments(
                         if (!seenEnvironments.has(name)) {
                             seenEnvironments.add(name);
                             const relativePath =
-                                configPath === normalizedRoot ? 'root' : getBaseName(configPath);
+                                configPath === normalizedRoot ? 'root' : baseName(configPath);
                             environments.push({
                                 name,
                                 source: relativePath,
@@ -182,7 +166,7 @@ export async function listAvailableEnvironments(
                         if (!seenEnvironments.has(name)) {
                             seenEnvironments.add(name);
                             const relativePath =
-                                configPath === normalizedRoot ? 'root' : getBaseName(configPath);
+                                configPath === normalizedRoot ? 'root' : baseName(configPath);
                             environments.push({
                                 name,
                                 source: relativePath,
@@ -222,7 +206,7 @@ function processEnvironmentVariables(
                 name: varName,
                 value: String(varValue),
                 isPrivate,
-                source: currentPath === normalizedRoot ? 'root' : getBaseName(currentPath),
+                source: currentPath === normalizedRoot ? 'root' : baseName(currentPath),
                 isInherited: !isCurrentFolder,
                 isOverridden: false,
                 isShared: false,
@@ -231,7 +215,7 @@ function processEnvironmentVariables(
             continue;
         }
 
-        var currentSource = currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
+        var currentSource = currentPath === normalizedRoot ? 'root' : baseName(currentPath);
         var isExistingFromCurrentFolder = existing.source === currentSource;
 
         if (!isExistingFromCurrentFolder && !existing.parentValue && !existing.isInherited) {
@@ -239,7 +223,7 @@ function processEnvironmentVariables(
             existing.parentValue = String(varValue);
             existing.parentIsPrivate = isPrivate;
             existing.parentSource =
-                currentPath === normalizedRoot ? 'root' : getBaseName(currentPath);
+                currentPath === normalizedRoot ? 'root' : baseName(currentPath);
         }
     }
 }
@@ -295,8 +279,8 @@ export async function getEnvironmentVariables(
 ): Promise<EnvironmentVariable[]> {
     const variables = new Map<string, EnvironmentVariable>();
     const sharedVariables = new Map<string, EnvironmentVariable>();
-    const normalizedRoot = collectionRoot.replace(/\\/g, '/');
-    let currentPath = folderPath.replace(/\\/g, '/');
+    const normalizedRoot = normalizePath(collectionRoot);
+    let currentPath = normalizePath(folderPath);
     const initialPath = currentPath;
 
     while (true) {
@@ -333,7 +317,7 @@ export async function getEnvironmentVariables(
             break;
         }
 
-        const parentPath = getParentPath(currentPath);
+        const parentPath = dirName(currentPath);
         if (parentPath === currentPath) {
             break;
         }

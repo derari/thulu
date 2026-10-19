@@ -1,14 +1,8 @@
 <script lang="ts">
-    import {onMount} from 'svelte';
     import {currentTheme, themeMode} from './stores/theme.js';
+    import {preferences} from './stores/preferences.js';
 
-    onMount(() => {
-        window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
-            const appearance = preferences.appearance || 'system';
-            themeMode.setTheme(appearance);
-        });
-        window.electronAPI.requestPreferences();
-    });
+    $: themeMode.setTheme($preferences?.appearance || 'system');
 
     function camelToKebab(str: string): string {
         return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();

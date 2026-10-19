@@ -1,5 +1,6 @@
 <script lang="ts">
     import {onMount} from 'svelte';
+    import {get} from 'svelte/store';
     import type {EnvironmentConfig} from './collection';
     import {
         type AvailableEnvironment,
@@ -12,6 +13,8 @@
     import {openEnvironments} from './stores/openEnvironments';
     import {currentCollection} from './stores/currentCollection';
     import {globalVariables} from './stores/globalVariables';
+    import {environmentSelection} from './stores/environmentSelection';
+    import {baseName, dirName, joinPath, normalizePath} from './paths';
 
     export let environmentConfig: EnvironmentConfig;
     export let collectionRoot: string;
@@ -38,21 +41,9 @@
     let openDropdownVariableName: string | null = null;
     let variableParentSources: Map<string, Array<{source: string, value: string, isPrivate: boolean}>> = new Map();
 
-    const SELECTED_ENV_KEY = 'thulu:selectedEnvironment';
-
-    function saveSelectedEnvironment(envName: string) {
-        if (envName) {
-            localStorage.setItem(SELECTED_ENV_KEY, envName);
-        }
-    }
-
-    function loadSelectedEnvironmentFromStorage(): string {
-        return localStorage.getItem(SELECTED_ENV_KEY) || '';
-    }
-
-    // Save to localStorage when selection changes
+    // Remember the selection (shared with HttpEditor)
     $: if (selectedEnvironment) {
-        saveSelectedEnvironment(selectedEnvironment);
+        environmentSelection.select(selectedEnvironment);
     }
 
     // Subscribe to pending action
@@ -60,16 +51,10 @@
         pendingActionValue = value;
     });
 
-    function getBaseName(filePath: string): string {
-        const normalized = filePath.replace(/\\/g, '/');
-        const parts = normalized.split('/');
-        return parts[parts.length - 1] || '';
-    }
-
     async function loadEnvironments() {
         loading = true;
-        const baseName = getBaseName(environmentConfig.folderPath);
-        folderName = baseName || 'Root';
+        const folderBaseName = baseName(environmentConfig.folderPath);
+        folderName = folderBaseName || 'Root';
 
         // Reset create/rename modes when switching folders
         isCreatingEnvironment = false;
@@ -77,8 +62,7 @@
         newEnvironmentName = '';
         errorMessage = '';
 
-        // Try to get the selected environment from localStorage (shared with HttpEditor)
-        const previousSelectedEnv = loadSelectedEnvironmentFromStorage();
+        const previousSelectedEnv = get(environmentSelection);
 
         try {
             if (!$currentCollection) {
@@ -195,10 +179,10 @@
 
         // Walk up the folder hierarchy
         let currentPath = environmentConfig.folderPath;
-        const rootPath = collectionRoot.replace(/\\/g, '/');
+        const rootPath = normalizePath(collectionRoot);
 
         while (true) {
-            const parentPath = getParentPath(currentPath);
+            const parentPath = dirName(currentPath);
             if (!parentPath || parentPath === currentPath) break;
             if (parentPath.length < rootPath.length) break;
 
@@ -215,7 +199,7 @@
                     const publicEnvFile = JSON.parse(publicContent);
                     if (publicEnvFile[selectedEnvironment]?.[variableName] !== undefined) {
                         sources.push({
-                            source: getBaseName(currentPath),
+                            source: baseName(currentPath),
                             value: publicEnvFile[selectedEnvironment][variableName],
                             isPrivate: false
                         });
@@ -232,7 +216,7 @@
                     const privateEnvFile = JSON.parse(privateContent);
                     if (privateEnvFile[selectedEnvironment]?.[variableName] !== undefined) {
                         sources.push({
-                            source: getBaseName(currentPath),
+                            source: baseName(currentPath),
                             value: privateEnvFile[selectedEnvironment][variableName],
                             isPrivate: true
                         });
@@ -246,17 +230,6 @@
         }
 
         return sources;
-    }
-
-    function joinPath(basePath: string, fileName: string): string {
-        return `${basePath}${basePath.endsWith('/') || basePath.endsWith('\\') ? '' : '/'}${fileName}`;
-    }
-
-    function getParentPath(filePath: string): string {
-        const normalized = filePath.replace(/\\/g, '/');
-        const parts = normalized.split('/');
-        parts.pop();
-        return parts.join('/');
     }
 
     function toggleInheritanceDropdown(variableName: string) {
@@ -276,7 +249,7 @@
             name: `newVar${nextNewVarId++}`,
             value: '',
             isPrivate: false,
-            source: getBaseName(environmentConfig.folderPath) || 'Root',
+            source: baseName(environmentConfig.folderPath) || 'Root',
             isInherited: false,
             isOverridden: false,
             isEditable: true

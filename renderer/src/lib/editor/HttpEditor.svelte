@@ -1,5 +1,6 @@
 <script lang="ts">
     import {onDestroy, onMount} from 'svelte';
+    import {get} from 'svelte/store';
     import {EditorView, keymap, lineNumbers} from '@codemirror/view';
     import {Compartment, EditorState} from '@codemirror/state';
     import {defaultKeymap} from '@codemirror/commands';
@@ -15,8 +16,10 @@
     import {currentCollection} from '../stores/currentCollection.js';
     import {globalVariables} from '../stores/globalVariables.js';
     import {isDarkMode} from '../stores/theme.js';
+    import {environmentSelection} from '../stores/environmentSelection.js';
     import {type AvailableEnvironment, listAvailableEnvironments} from '../environmentParser.js';
     import {executeHttpRequest} from './httpRequestExecutor.js';
+    import {dirName, relativePath} from '../paths.js';
 
     export let content: string = '';
     export let sectionLineNumber: number | undefined = undefined;
@@ -30,13 +33,9 @@
     const httpLang = createHttpLanguage({mode: 'request'});
     const httpBodyBg = createHttpBodyLineBackground({mode: 'request'});
 
-    const SELECTED_ENV_KEY = 'thulu:selectedEnvironment';
+    selectedEnvironment = get(environmentSelection);
 
-    if (typeof window !== 'undefined') {
-        selectedEnvironment = loadSelectedEnvironment();
-    }
-
-    $: saveSelectedEnvironment(selectedEnvironment);
+    $: environmentSelection.select(selectedEnvironment);
 
     $: isDirty = $openFile && content !== $openFile.content || false;
 
@@ -60,18 +59,6 @@
         scrollToSection();
     }
 
-    function saveSelectedEnvironment(envName: string) {
-        if (envName) {
-            localStorage.setItem(SELECTED_ENV_KEY, envName);
-        } else {
-            localStorage.removeItem(SELECTED_ENV_KEY);
-        }
-    }
-
-    function loadSelectedEnvironment(): string {
-        return localStorage.getItem(SELECTED_ENV_KEY) || '';
-    }
-
     function handleSaveFile() {
         openFile.save();
     }
@@ -87,14 +74,7 @@
             return '';
         }
 
-        const collectionPath = collection.path;
-        const filePath = file.filePath;
-
-        if (filePath.startsWith(collectionPath)) {
-            return filePath.substring(collectionPath.length).replace(/^[\\\/]/, '');
-        }
-
-        return filePath;
+        return relativePath(file.filePath, collection.path);
     }
 
     async function loadEnvironments() {
@@ -108,13 +88,9 @@
         }
 
         try {
-            const filePath = file.filePath;
-            // Normalize path separators and find the last separator
-            const normalizedPath = filePath.replace(/\\/g, '/');
-            const lastSlashIndex = normalizedPath.lastIndexOf('/');
-            const fileDir = lastSlashIndex > 0 ? filePath.substring(0, lastSlashIndex) : filePath;
+            const fileDir = dirName(file.filePath);
 
-            const previouslySelected = loadSelectedEnvironment();
+            const previouslySelected = get(environmentSelection);
 
             availableEnvironments = await listAvailableEnvironments(fileDir, collection);
 
@@ -147,9 +123,7 @@
         }
 
         const filePath = $openFile.filePath;
-        const normalizedPath = filePath.replace(/\\/g, '/');
-        const lastSlashIndex = normalizedPath.lastIndexOf('/');
-        const fileDirectory = lastSlashIndex > 0 ? filePath.substring(0, lastSlashIndex) : filePath;
+        const fileDirectory = dirName(filePath);
 
         const collectionPath = $currentCollection.path;
         const collectionGlobalVars = globalVariables.get(collectionPath);
@@ -193,9 +167,7 @@
             const section = parsed.sections.find(
                 s => sectionLineNumber >= s.startLineNumber && sectionLineNumber < s.endLineNumber
             );
-            const relativeFile = filePath.startsWith(collectionPath)
-                ? filePath.substring(collectionPath.length).replace(/^[\\/]/, '')
-                : filePath;
+            const relativeFile = relativePath(filePath, collectionPath);
             const statusCodeMatch = response.statusLine.match(/\s(\d+)\s/);
             const statusCode = statusCodeMatch ? parseInt(statusCodeMatch[1], 10) : 0;
             window.electronAPI.saveHistory({

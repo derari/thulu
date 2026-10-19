@@ -3,72 +3,34 @@
     import {currentCollection} from './stores/currentCollection.js';
     import {openFile} from './stores/openFile.js';
     import {openEnvironments} from './stores/openEnvironments.js';
+    import {preferences} from './stores/preferences.js';
     import type {CollectionItem, EnvironmentConfig, HttpSection} from './collection';
     import {ChevronRight, EllipsisVertical, Info, Settings, TriangleAlert} from 'lucide-svelte';
-    import {onMount} from 'svelte';
     import {flattenCollection, flattenItems, formatVerb, getVerbColor} from './CollectionItemsUtils';
     import RenameModal from './RenameModal.svelte';
     import NewItemModal from './NewItemModal.svelte';
     import ReadmeView from './ReadmeView.svelte';
-
-    function basename(filePath: string): string {
-        const normalized = filePath.replace(/\\/g, '/');
-        const parts = normalized.split('/');
-        return parts[parts.length - 1] || '';
-    }
-
-    function dirname(filePath: string): string {
-        const normalized = filePath.replace(/\\/g, '/');
-        const parts = normalized.split('/');
-        parts.pop();
-        return parts.join('/');
-    }
-
-    function joinPath(dir: string, name: string): string {
-        const normalizedDir = dir.replace(/\\/g, '/');
-        return `${normalizedDir}/${name}`.replace(/\\/g, '/');
-    }
+    import {baseName, dirName, joinPath} from './paths';
 
     const INDENT_WIDTH = 15;
     const DELETE_CONFIRMATION_TIMEOUT = 10000;
 
     let collapsed: Set<string> = new Set();
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let cachedPreferences: Preferences | null = null;
 
-    // Keep a local cache of preferences and react to collection changes
-    onMount(() => {
-        const unsubscribe = window.electronAPI.onPreferencesLoad((preferences: Preferences) => {
-            cachedPreferences = preferences;
-            // Initialize collapsed state if we have a current collection and haven't loaded yet
-            if ($currentCollection && lastLoadedCollectionPath !== $currentCollection.path) {
-                lastLoadedCollectionPath = $currentCollection.path;
-                const entry = preferences.collections?.find(c => c.path === $currentCollection!.path);
-                collapsed = new Set(entry?.collapsedPaths ?? []);
-            }
-        });
-        window.electronAPI.requestPreferences();
-        return unsubscribe;
-    });
-
-    // Re-initialize collapsed state whenever the active collection changes (and prefs are already loaded)
+    // Re-initialize collapsed state whenever the active collection changes
     let lastLoadedCollectionPath: string | null = null;
-    $: if ($currentCollection && cachedPreferences && $currentCollection.path !== lastLoadedCollectionPath) {
+    $: if ($currentCollection && $preferences && $currentCollection.path !== lastLoadedCollectionPath) {
         lastLoadedCollectionPath = $currentCollection.path;
-        const entry = cachedPreferences.collections?.find(c => c.path === $currentCollection!.path);
+        const entry = $preferences.collections?.find(c => c.path === $currentCollection!.path);
         collapsed = new Set(entry?.collapsedPaths ?? []);
     }
 
     function saveCollapsedState() {
         if (saveDebounceTimer !== null) clearTimeout(saveDebounceTimer);
         saveDebounceTimer = setTimeout(() => {
-            const collectionPath = $currentCollection?.path;
-            if (!collectionPath) return;
-            const existing = cachedPreferences?.collections ?? [];
-            const updated: CollectionMetaData[] = existing.some(c => c.path === collectionPath)
-                ? existing.map(c => c.path === collectionPath ? {...c, collapsedPaths: [...collapsed]} : c)
-                : [...existing, {path: collectionPath, name: $currentCollection?.name ?? '', collapsedPaths: [...collapsed]}];
-            window.electronAPI.savePreferences({collections: updated});
+            if (!$currentCollection) return;
+            preferences.updateCollection($currentCollection.path, $currentCollection.name, {collapsedPaths: [...collapsed]});
         }, 300);
     }
 
@@ -279,7 +241,7 @@
         // When there's only a file, use the file name (without extension)
         const targetPath = item.filePath || item.folderPath;
         if (!targetPath) return '';
-        const fullName = basename(targetPath);
+        const fullName = baseName(targetPath);
 
         // For files (whether alone or with a folder), strip the extension
         if (item.filePath) {
@@ -293,7 +255,7 @@
     }
 
     function getExtension(filePath: string): string {
-        const name = basename(filePath);
+        const name = baseName(filePath);
         const lastDot = name.lastIndexOf('.');
         if (lastDot > 0) {
             return name.substring(lastDot);
@@ -309,7 +271,7 @@
         const operations: Promise<{ success: boolean; error?: string }>[] = [];
 
         if (renameFile && renameItem.filePath) {
-            const dir = dirname(renameItem.filePath);
+            const dir = dirName(renameItem.filePath);
             const extension = getExtension(renameItem.filePath);
             const newNameWithExtension = newName + extension;
             const newPath = joinPath(dir, newNameWithExtension);
@@ -317,7 +279,7 @@
         }
 
         if (renameFolder && renameItem.folderPath) {
-            const dir = dirname(renameItem.folderPath);
+            const dir = dirName(renameItem.folderPath);
             const newPath = joinPath(dir, newName);
             operations.push(window.electronAPI.renamePath(renameItem.folderPath, newPath));
         }
@@ -389,7 +351,7 @@
 
         if (!$currentCollection) return;
 
-        const targetFolder = item.folderPath || dirname(item.filePath || '');
+        const targetFolder = item.folderPath || dirName(item.filePath || '');
         const envFilePath = joinPath(targetFolder, 'http-client.env.json');
         const initialContent = '{}';
 
@@ -408,7 +370,7 @@
 
         showNewItemModal = false;
 
-        let parentPath = newItemParent.folderPath || dirname(newItemParent.filePath || '');
+        let parentPath = newItemParent.folderPath || dirName(newItemParent.filePath || '');
 
         if (newItemType === 'folder') {
             const newFolderPath = joinPath(parentPath, name);
@@ -426,9 +388,9 @@
             // Adjust variables for the file branch to use
             if (!createNewFile) {
                 // Use folder name as the file name
-                name = basename(newItemParent.folderPath || dirname(newItemParent.filePath || ''));
+                name = baseName(newItemParent.folderPath || dirName(newItemParent.filePath || ''));
                 // Adjust parentPath to be the parent of the current folder
-                parentPath = dirname(newItemParent.folderPath || '');
+                parentPath = dirName(newItemParent.folderPath || '');
                 // Set the parent to have a folderPath so file branch uses it directly
                 newItemParent = { ...newItemParent, folderPath: parentPath };
             }
