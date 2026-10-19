@@ -1,13 +1,11 @@
 import type { CollectionItem, CurrentCollection, EnvironmentConfig } from './collection';
-import { baseName, dirName, joinPath, normalizePath } from './paths';
-
-export interface EnvironmentVariables {
-    [key: string]: string;
-}
-
-export interface EnvironmentFile {
-    [environmentName: string]: EnvironmentVariables;
-}
+import {
+    type EnvironmentFile,
+    folderAndAncestors,
+    folderLabel,
+    readEnvironmentFile
+} from './environmentFiles';
+import { normalizePath } from './paths';
 
 export interface AvailableEnvironment {
     name: string;
@@ -34,29 +32,12 @@ export interface EnvironmentVariable {
     parentSource?: string;
 }
 
-function parseEnvironmentFile(content: string): EnvironmentFile {
-    try {
-        return JSON.parse(content);
-    } catch (error) {
-        console.error('Failed to parse environment file:', error);
-        return {};
-    }
-}
-
-function getEnvironmentNamesFromFile(content: string): string[] {
-    const envFile = parseEnvironmentFile(content);
-    return Object.keys(envFile);
-}
-
 function findEnvironmentConfigs(
     items: CollectionItem[],
     folderPath: string,
     collectionRoot: string,
     result: FoundEnvironmentConfig[] = []
 ): FoundEnvironmentConfig[] {
-    const normalizedFolderPath = normalizePath(folderPath);
-    const normalizedRoot = normalizePath(collectionRoot);
-
     function findConfigForPath(
         items: CollectionItem[],
         targetPath: string
@@ -86,25 +67,11 @@ function findEnvironmentConfigs(
         return null;
     }
 
-    // Walk from current folder up to root, finding configs along the way
-    let currentPath = normalizedFolderPath;
-
-    while (true) {
-        const config = findConfigForPath(items, currentPath);
+    for (const ancestorPath of folderAndAncestors(folderPath, collectionRoot)) {
+        const config = findConfigForPath(items, ancestorPath);
         if (config) {
             result.push(config);
         }
-
-        if (currentPath === normalizedRoot) {
-            break;
-        }
-
-        const parentPath = dirName(currentPath);
-        if (parentPath === currentPath || parentPath.length < normalizedRoot.length) {
-            break;
-        }
-
-        currentPath = parentPath;
     }
 
     return result;
@@ -117,66 +84,31 @@ export async function listAvailableEnvironments(
     const environments: AvailableEnvironment[] = [];
     const seenEnvironments = new Set<string>();
 
-    const normalizedRoot = normalizePath(collection.path);
     const normalizedFolderPath = normalizePath(folderPath);
 
-    // Find all environment configs in the collection
+    // Configs are ordered from the current folder up to the root
     const envConfigs = findEnvironmentConfigs([collection.root], folderPath, collection.path);
 
-    // Configs are already in depth-first order (deepest first) from findEnvironmentConfigs
-    // Process environment configs from current folder up to root
     for (const config of envConfigs) {
         const configPath = normalizePath(config.folderPath);
-
         const isFromCurrentFolder = configPath === normalizedFolderPath;
+        const source = folderLabel(configPath, collection.path);
 
-        // Try private env file
-        if (config.environments.hasPrivateEnv) {
-            const privateEnvPath = joinPath(configPath, 'http-client.private.env.json');
-            try {
-                const privateContent = await window.electronAPI.readFile(privateEnvPath);
-                if (privateContent) {
-                    const envNames = getEnvironmentNamesFromFile(privateContent);
-                    for (const name of envNames) {
-                        if (!seenEnvironments.has(name)) {
-                            seenEnvironments.add(name);
-                            const relativePath =
-                                configPath === normalizedRoot ? 'root' : baseName(configPath);
-                            environments.push({
-                                name,
-                                source: relativePath,
-                                isFromCurrentFolder
-                            });
-                        }
-                    }
-                }
-            } catch (error) {
-                // File doesn't exist, continue
+        const filesToRead = [
+            { isPrivate: true, exists: config.environments.hasPrivateEnv },
+            { isPrivate: false, exists: config.environments.hasPublicEnv }
+        ];
+
+        for (const { isPrivate, exists } of filesToRead) {
+            if (!exists) {
+                continue;
             }
-        }
-
-        // Try public env file
-        if (config.environments.hasPublicEnv) {
-            const publicEnvPath = joinPath(configPath, 'http-client.env.json');
-            try {
-                const publicContent = await window.electronAPI.readFile(publicEnvPath);
-                if (publicContent) {
-                    const envNames = getEnvironmentNamesFromFile(publicContent);
-                    for (const name of envNames) {
-                        if (!seenEnvironments.has(name)) {
-                            seenEnvironments.add(name);
-                            const relativePath =
-                                configPath === normalizedRoot ? 'root' : baseName(configPath);
-                            environments.push({
-                                name,
-                                source: relativePath,
-                                isFromCurrentFolder
-                            });
-                        }
-                    }
+            const envFile = await readEnvironmentFile(configPath, isPrivate);
+            for (const name of Object.keys(envFile)) {
+                if (!seenEnvironments.has(name)) {
+                    seenEnvironments.add(name);
+                    environments.push({ name, source, isFromCurrentFolder });
                 }
-            } catch (error) {
-                // File doesn't exist, continue
             }
         }
     }
@@ -189,7 +121,7 @@ function processEnvironmentVariables(
     environmentName: string,
     isPrivate: boolean,
     currentPath: string,
-    normalizedRoot: string,
+    collectionRoot: string,
     initialPath: string,
     variables: Map<string, EnvironmentVariable>
 ): void {
@@ -197,16 +129,17 @@ function processEnvironmentVariables(
         return;
     }
 
-    var isCurrentFolder = currentPath === initialPath;
+    const isCurrentFolder = currentPath === initialPath;
+    const currentSource = folderLabel(currentPath, collectionRoot);
 
-    for (var [varName, varValue] of Object.entries(envFile[environmentName])) {
-        var existing = variables.get(varName);
+    for (const [varName, varValue] of Object.entries(envFile[environmentName])) {
+        const existing = variables.get(varName);
         if (!existing) {
             variables.set(varName, {
                 name: varName,
                 value: String(varValue),
                 isPrivate,
-                source: currentPath === normalizedRoot ? 'root' : baseName(currentPath),
+                source: currentSource,
                 isInherited: !isCurrentFolder,
                 isOverridden: false,
                 isShared: false,
@@ -215,61 +148,50 @@ function processEnvironmentVariables(
             continue;
         }
 
-        var currentSource = currentPath === normalizedRoot ? 'root' : baseName(currentPath);
-        var isExistingFromCurrentFolder = existing.source === currentSource;
+        const isExistingFromCurrentFolder = existing.source === currentSource;
 
         if (!isExistingFromCurrentFolder && !existing.parentValue && !existing.isInherited) {
             existing.isOverridden = true;
             existing.parentValue = String(varValue);
             existing.parentIsPrivate = isPrivate;
-            existing.parentSource =
-                currentPath === normalizedRoot ? 'root' : baseName(currentPath);
+            existing.parentSource = currentSource;
         }
     }
 }
 
 async function processEnvironmentFile(
-    envPath: string,
     isPrivate: boolean,
     environmentName: string,
     currentPath: string,
-    normalizedRoot: string,
+    collectionRoot: string,
     initialPath: string,
     variables: Map<string, EnvironmentVariable>,
     sharedVariables: Map<string, EnvironmentVariable>
 ): Promise<void> {
-    try {
-        var content = await window.electronAPI.readFile(envPath);
-        if (!content) {
-            return;
-        }
+    const envFile = await readEnvironmentFile(currentPath, isPrivate);
 
-        var envFile = parseEnvironmentFile(content);
-        processEnvironmentVariables(
-            envFile,
-            environmentName,
-            isPrivate,
-            currentPath,
-            normalizedRoot,
-            initialPath,
-            variables
-        );
+    processEnvironmentVariables(
+        envFile,
+        environmentName,
+        isPrivate,
+        currentPath,
+        collectionRoot,
+        initialPath,
+        variables
+    );
 
-        if (environmentName === '$shared') {
-            return;
-        }
-        processEnvironmentVariables(
-            envFile,
-            '$shared',
-            isPrivate,
-            currentPath,
-            normalizedRoot,
-            initialPath,
-            sharedVariables
-        );
-    } catch (error) {
-        // File doesn't exist, continue
+    if (environmentName === '$shared') {
+        return;
     }
+    processEnvironmentVariables(
+        envFile,
+        '$shared',
+        isPrivate,
+        currentPath,
+        collectionRoot,
+        initialPath,
+        sharedVariables
+    );
 }
 
 export async function getEnvironmentVariables(
@@ -279,52 +201,25 @@ export async function getEnvironmentVariables(
 ): Promise<EnvironmentVariable[]> {
     const variables = new Map<string, EnvironmentVariable>();
     const sharedVariables = new Map<string, EnvironmentVariable>();
-    const normalizedRoot = normalizePath(collectionRoot);
-    let currentPath = normalizePath(folderPath);
-    const initialPath = currentPath;
+    const folders = folderAndAncestors(folderPath, collectionRoot);
+    const initialPath = folders[0];
 
-    while (true) {
-        const publicEnvPath = joinPath(currentPath, 'http-client.env.json');
-        const privateEnvPath = joinPath(currentPath, 'http-client.private.env.json');
-
-        await processEnvironmentFile(
-            privateEnvPath,
-            true,
-            environmentName,
-            currentPath,
-            normalizedRoot,
-            initialPath,
-            variables,
-            sharedVariables
-        );
-
-        await processEnvironmentFile(
-            publicEnvPath,
-            false,
-            environmentName,
-            currentPath,
-            normalizedRoot,
-            initialPath,
-            variables,
-            sharedVariables
-        );
-
-        if (currentPath === normalizedRoot) {
-            break;
+    for (const currentPath of folders) {
+        // The private file is read first so its values win over the public file in the same folder
+        for (const isPrivate of [true, false]) {
+            await processEnvironmentFile(
+                isPrivate,
+                environmentName,
+                currentPath,
+                collectionRoot,
+                initialPath,
+                variables,
+                sharedVariables
+            );
         }
-
-        if (!currentPath.startsWith(normalizedRoot)) {
-            break;
-        }
-
-        const parentPath = dirName(currentPath);
-        if (parentPath === currentPath) {
-            break;
-        }
-        currentPath = parentPath;
     }
 
-    for (var [varName, sharedVar] of sharedVariables) {
+    for (const [varName, sharedVar] of sharedVariables) {
         const variable = variables.get(varName);
         if (variable) {
             if (!variable.parentValue) {

@@ -1,4 +1,6 @@
-import type { CollectionItem } from './collection';
+import type { CollectionItem, EnvironmentConfig } from './collection';
+import { environmentFilePath, isEnvironmentFileName } from './environmentFiles';
+import { joinPath } from './paths';
 
 interface DirectoryEntry {
     name: string;
@@ -31,9 +33,14 @@ async function folderContainsMarkdown(folderPath: string): Promise<boolean> {
     return entries.some((entry) => entry.isFile && entry.name.endsWith('.md'));
 }
 
-function joinPath(basePath: string, ...parts: string[]): string {
-    const separator = basePath.includes('\\') ? '\\' : '/';
-    return [basePath, ...parts].join(separator).replace(/[\\\/]+/g, separator);
+async function scanEnvironmentConfig(folderPath: string): Promise<EnvironmentConfig | undefined> {
+    const hasPublicEnv = await fileExists(environmentFilePath(folderPath, false));
+    const hasPrivateEnv = await fileExists(environmentFilePath(folderPath, true));
+
+    if (!hasPublicEnv && !hasPrivateEnv) {
+        return undefined;
+    }
+    return { folderPath, hasPublicEnv, hasPrivateEnv };
 }
 
 async function scanCollectionFolder(folderPath: string): Promise<CollectionItem[]> {
@@ -45,10 +52,7 @@ async function scanCollectionFolder(folderPath: string): Promise<CollectionItem[
             continue;
         }
 
-        if (
-            entry.name === 'http-client.env.json' ||
-            entry.name === 'http-client.private.env.json'
-        ) {
+        if (isEnvironmentFileName(entry.name)) {
             continue;
         }
 
@@ -65,19 +69,7 @@ async function scanCollectionFolder(folderPath: string): Promise<CollectionItem[
             item.items = await scanCollectionFolder(fullPath);
             item.hasReadme = await folderContainsMarkdown(fullPath);
 
-            const publicEnvPath = joinPath(fullPath, 'http-client.env.json');
-            const privateEnvPath = joinPath(fullPath, 'http-client.private.env.json');
-            const hasPublicEnv = await fileExists(publicEnvPath);
-            const hasPrivateEnv = await fileExists(privateEnvPath);
-
-            if (hasPublicEnv || hasPrivateEnv) {
-                item.environments = {
-                    folderPath: fullPath,
-                    hasPublicEnv,
-                    hasPrivateEnv
-                };
-            }
-
+            item.environments = await scanEnvironmentConfig(fullPath);
             continue;
         }
 
@@ -102,26 +94,11 @@ async function scanCollectionFolder(folderPath: string): Promise<CollectionItem[
 export async function scanCollectionRoot(folderPath: string): Promise<CollectionItem> {
     const items = await scanCollectionFolder(folderPath);
 
-    const publicEnvPath = joinPath(folderPath, 'http-client.env.json');
-    const privateEnvPath = joinPath(folderPath, 'http-client.private.env.json');
-    const hasPublicEnv = await fileExists(publicEnvPath);
-    const hasPrivateEnv = await fileExists(privateEnvPath);
-    const hasReadme = await folderContainsMarkdown(folderPath);
-
-    const rootItem: CollectionItem = {
+    return {
         title: 'root',
         folderPath: folderPath,
         items: items,
-        hasReadme: hasReadme
+        hasReadme: await folderContainsMarkdown(folderPath),
+        environments: await scanEnvironmentConfig(folderPath)
     };
-
-    if (hasPublicEnv || hasPrivateEnv) {
-        rootItem.environments = {
-            folderPath,
-            hasPublicEnv,
-            hasPrivateEnv
-        };
-    }
-
-    return rootItem;
 }

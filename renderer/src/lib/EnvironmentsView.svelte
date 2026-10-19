@@ -14,7 +14,15 @@
     import {currentCollection} from './stores/currentCollection';
     import {globalVariables} from './stores/globalVariables';
     import {environmentSelection} from './stores/environmentSelection';
-    import {baseName, dirName, joinPath, normalizePath} from './paths';
+    import {baseName} from './paths';
+    import {
+        createEnvironment,
+        deleteEnvironment as deleteEnvironmentFromFiles,
+        getVariableParentSources,
+        type ParentSource,
+        renameEnvironment,
+        saveEnvironmentVariables
+    } from './environmentFiles';
 
     export let environmentConfig: EnvironmentConfig;
     export let collectionRoot: string;
@@ -39,7 +47,7 @@
     let isCurrentEnvLocallyDefined = false;
     let collectionGlobalVars: Record<string, string> = {};
     let openDropdownVariableName: string | null = null;
-    let variableParentSources: Map<string, Array<{source: string, value: string, isPrivate: boolean}>> = new Map();
+    let variableParentSources: Map<string, ParentSource[]> = new Map();
 
     // Remember the selection (shared with HttpEditor)
     $: if (selectedEnvironment) {
@@ -164,7 +172,12 @@
 
         for (const variable of variables) {
             if (variable.isInherited || variable.isOverridden) {
-                const sources = await getParentSourcesForVariable(variable.name);
+                const sources = await getVariableParentSources(
+                    selectedEnvironment,
+                    variable.name,
+                    environmentConfig.folderPath,
+                    collectionRoot
+                );
                 if (sources.length > 0) {
                     variableParentSources.set(variable.name, sources);
                 }
@@ -172,64 +185,6 @@
         }
 
         variableParentSources = new Map(variableParentSources);
-    }
-
-    async function getParentSourcesForVariable(variableName: string): Promise<Array<{source: string, value: string, isPrivate: boolean}>> {
-        const sources: Array<{source: string, value: string, isPrivate: boolean}> = [];
-
-        // Walk up the folder hierarchy
-        let currentPath = environmentConfig.folderPath;
-        const rootPath = normalizePath(collectionRoot);
-
-        while (true) {
-            const parentPath = dirName(currentPath);
-            if (!parentPath || parentPath === currentPath) break;
-            if (parentPath.length < rootPath.length) break;
-
-            currentPath = parentPath;
-
-            // Check both public and private env files
-            const publicEnvPath = joinPath(currentPath, 'http-client.env.json');
-            const privateEnvPath = joinPath(currentPath, 'http-client.private.env.json');
-
-            try {
-                // Check public file
-                const publicContent = await window.electronAPI.readFile(publicEnvPath);
-                if (publicContent) {
-                    const publicEnvFile = JSON.parse(publicContent);
-                    if (publicEnvFile[selectedEnvironment]?.[variableName] !== undefined) {
-                        sources.push({
-                            source: baseName(currentPath),
-                            value: publicEnvFile[selectedEnvironment][variableName],
-                            isPrivate: false
-                        });
-                    }
-                }
-            } catch (error) {
-                // File doesn't exist
-            }
-
-            try {
-                // Check private file
-                const privateContent = await window.electronAPI.readFile(privateEnvPath);
-                if (privateContent) {
-                    const privateEnvFile = JSON.parse(privateContent);
-                    if (privateEnvFile[selectedEnvironment]?.[variableName] !== undefined) {
-                        sources.push({
-                            source: baseName(currentPath),
-                            value: privateEnvFile[selectedEnvironment][variableName],
-                            isPrivate: true
-                        });
-                    }
-                }
-            } catch (error) {
-                // File doesn't exist
-            }
-
-            if (currentPath === rootPath) break;
-        }
-
-        return sources;
     }
 
     function toggleInheritanceDropdown(variableName: string) {
@@ -260,69 +215,12 @@
     }
 
     async function saveChanges() {
-        const publicEnvPath = `${environmentConfig.folderPath}/http-client.env.json`;
-        const privateEnvPath = `${environmentConfig.folderPath}/http-client.private.env.json`;
-
         try {
-            // Read existing files
-            let publicEnvFile: any = {};
-            let privateEnvFile: any = {};
-
-            try {
-                const publicContent = await window.electronAPI.readFile(publicEnvPath);
-                if (publicContent) {
-                    publicEnvFile = JSON.parse(publicContent);
-                }
-            } catch (error) {
-                // File doesn't exist yet
-            }
-
-            try {
-                const privateContent = await window.electronAPI.readFile(privateEnvPath);
-                if (privateContent) {
-                    privateEnvFile = JSON.parse(privateContent);
-                }
-            } catch (error) {
-                // File doesn't exist yet
-            }
-
-            // Get existing vars for this environment or create empty objects
-            const publicVars = publicEnvFile[selectedEnvironment] || {};
-            const privateVars = privateEnvFile[selectedEnvironment] || {};
-
-            // Process each variable
-            for (const variable of variables) {
-                if (variable.isEditable && !isDeleted(variable)) {
-                    // Add or update the variable in the appropriate file
-                    if (variable.isPrivate) {
-                        privateVars[variable.name] = variable.value;
-                        // Remove from public if it was there before
-                        delete publicVars[variable.name];
-                    } else {
-                        publicVars[variable.name] = variable.value;
-                        // Remove from private if it was there before
-                        delete privateVars[variable.name];
-                    }
-                } else if (variable.isInherited || isDeleted(variable)) {
-                    // Remove from both files if inherited or deleted
-                    delete publicVars[variable.name];
-                    delete privateVars[variable.name];
-                }
-            }
-
-            // Update the environment objects
-            publicEnvFile[selectedEnvironment] = publicVars;
-            privateEnvFile[selectedEnvironment] = privateVars;
-
-            // Write back to files (always write to handle deletions)
-            await window.electronAPI.writeFile(
-                publicEnvPath,
-                JSON.stringify(publicEnvFile, null, 2)
-            );
-
-            await window.electronAPI.writeFile(
-                privateEnvPath,
-                JSON.stringify(privateEnvFile, null, 2)
+            await saveEnvironmentVariables(
+                environmentConfig.folderPath,
+                selectedEnvironment,
+                variables,
+                deletedVariables
             );
 
             // Reload variables
@@ -482,25 +380,8 @@
             return;
         }
 
-        // Create empty environment in both files
-        const publicEnvPath = `${environmentConfig.folderPath}/http-client.env.json`;
-
         try {
-            let publicEnvFile: any = {};
-
-            try {
-                const publicContent = await window.electronAPI.readFile(publicEnvPath);
-                if (publicContent) publicEnvFile = JSON.parse(publicContent);
-            } catch (error) {
-            }
-
-            // Create empty environment
-            publicEnvFile[trimmedName] = {};
-
-            await window.electronAPI.writeFile(
-                publicEnvPath,
-                JSON.stringify(publicEnvFile, null, 2)
-            );
+            await createEnvironment(environmentConfig.folderPath, trimmedName);
 
             // Reload environments and select the new one
             await loadEnvironments();
@@ -521,38 +402,8 @@
             return;
         }
 
-        const publicEnvPath = `${environmentConfig.folderPath}/http-client.env.json`;
-        const privateEnvPath = `${environmentConfig.folderPath}/http-client.private.env.json`;
-
         try {
-            let publicEnvFile: any = {};
-            let privateEnvFile: any = {};
-
-            try {
-                const publicContent = await window.electronAPI.readFile(publicEnvPath);
-                if (publicContent) publicEnvFile = JSON.parse(publicContent);
-            } catch (error) {
-            }
-
-            try {
-                const privateContent = await window.electronAPI.readFile(privateEnvPath);
-                if (privateContent) privateEnvFile = JSON.parse(privateContent);
-            } catch (error) {
-            }
-
-            // Delete from both files
-            delete publicEnvFile[selectedEnvironment];
-            delete privateEnvFile[selectedEnvironment];
-
-            await window.electronAPI.writeFile(
-                publicEnvPath,
-                JSON.stringify(publicEnvFile, null, 2)
-            );
-
-            await window.electronAPI.writeFile(
-                privateEnvPath,
-                JSON.stringify(privateEnvFile, null, 2)
-            );
+            await deleteEnvironmentFromFiles(environmentConfig.folderPath, selectedEnvironment);
 
             // Reload environments
             await loadEnvironments();
@@ -591,45 +442,8 @@
             return;
         }
 
-        const publicEnvPath = `${environmentConfig.folderPath}/http-client.env.json`;
-        const privateEnvPath = `${environmentConfig.folderPath}/http-client.private.env.json`;
-
         try {
-            let publicEnvFile: any = {};
-            let privateEnvFile: any = {};
-
-            try {
-                const publicContent = await window.electronAPI.readFile(publicEnvPath);
-                if (publicContent) publicEnvFile = JSON.parse(publicContent);
-            } catch (error) {
-            }
-
-            try {
-                const privateContent = await window.electronAPI.readFile(privateEnvPath);
-                if (privateContent) privateEnvFile = JSON.parse(privateContent);
-            } catch (error) {
-            }
-
-            // Rename in both files
-            if (publicEnvFile[selectedEnvironment]) {
-                publicEnvFile[trimmedName] = publicEnvFile[selectedEnvironment];
-                delete publicEnvFile[selectedEnvironment];
-            }
-
-            if (privateEnvFile[selectedEnvironment]) {
-                privateEnvFile[trimmedName] = privateEnvFile[selectedEnvironment];
-                delete privateEnvFile[selectedEnvironment];
-            }
-
-            await window.electronAPI.writeFile(
-                publicEnvPath,
-                JSON.stringify(publicEnvFile, null, 2)
-            );
-
-            await window.electronAPI.writeFile(
-                privateEnvPath,
-                JSON.stringify(privateEnvFile, null, 2)
-            );
+            await renameEnvironment(environmentConfig.folderPath, selectedEnvironment, trimmedName);
 
             // Reload environments and select the renamed one
             await loadEnvironments();

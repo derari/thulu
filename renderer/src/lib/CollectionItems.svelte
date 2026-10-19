@@ -11,6 +11,7 @@
     import NewItemModal from './NewItemModal.svelte';
     import ReadmeView from './ReadmeView.svelte';
     import {baseName, dirName, joinPath} from './paths';
+    import {createEnvironmentFile, deleteEnvironmentFiles} from './environmentFiles';
 
     const INDENT_WIDTH = 15;
     const DELETE_CONFIRMATION_TIMEOUT = 10000;
@@ -165,25 +166,13 @@
         if (confirmDeleteType === 'environment') {
             if (!confirmDeleteEnvironmentConfig) return;
 
-            const publicEnvPath = joinPath(confirmDeleteEnvironmentConfig.folderPath, 'http-client.env.json');
-            const privateEnvPath = joinPath(confirmDeleteEnvironmentConfig.folderPath, 'http-client.private.env.json');
-
-            const operations: Promise<{ success: boolean; error?: string }>[] = [];
-
-            if (confirmDeleteEnvironmentConfig.hasPublicEnv) {
-                operations.push(window.electronAPI.deletePath(publicEnvPath));
-            }
-
-            if (confirmDeleteEnvironmentConfig.hasPrivateEnv) {
-                operations.push(window.electronAPI.deletePath(privateEnvPath));
-            }
+            const envConfig = confirmDeleteEnvironmentConfig;
 
             confirmDeleteKey = null;
             confirmDeleteType = null;
             confirmDeleteEnvironmentConfig = null;
 
-            const results = await Promise.all(operations);
-            const allSucceeded = results.every(r => r.success);
+            const allSucceeded = await deleteEnvironmentFiles(envConfig);
 
             if (allSucceeded && $currentCollection) {
                 await currentCollection.loadCollection(
@@ -352,10 +341,7 @@
         if (!$currentCollection) return;
 
         const targetFolder = item.folderPath || dirName(item.filePath || '');
-        const envFilePath = joinPath(targetFolder, 'http-client.env.json');
-        const initialContent = '{}';
-
-        const result = await window.electronAPI.createFile(envFilePath, initialContent);
+        const result = await createEnvironmentFile(targetFolder);
 
         if (result.success) {
             await currentCollection.loadCollection(
